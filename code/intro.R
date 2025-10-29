@@ -14,7 +14,6 @@ log(9,3) #= 2, 3 is the base
 sum(c(TRUE,FALSE,TRUE))
 sum(!c(TRUE,FALSE,TRUE)) # reverse
 
-# ==== exercise 1 =====
 
 a <- c("a", "a.  d","v")
 b <- c(1,2,3,4)
@@ -126,3 +125,73 @@ data <-read.csv("data/framingham.csv")
 head(data)
 str(data)
 data[data$currentSmoker == 1,]
+
+
+# ==== exercise 1 =====
+
+
+a <- 2
+log(1000,base=10)
+sin <- a
+sin
+sin(sin)
+sin(1)^2 + cos(1)^2
+b <- TRUE
+b+1
+sqrt(b)
+b+b
+c <- 1
+c+1
+
+v <- c(2, 4, 5, 6, 4, -1)
+v+1
+-v  #v not working
+v[2]
+v[-6]  #both works
+v[1:5]
+length(v[v=4]) # how many values of 4
+
+v[v<0] <- -v[v<0] # Swap the sign of all negative values.
+v
+
+f1 <- sample(x=LETTERS, size =5) # random sampling
+f1
+
+sample(c("A", "B", "C"), 10, replace = TRUE, prob = c(0.6, 0.3, 0.1))
+class(f1)
+
+f2 <- factor(f1) #factor
+f2
+
+f3 <- c(sample(1:10, 5)) #vector
+f3
+
+L <- list(f1,f2,f3)
+L
+str(L)
+L[3]
+L[[3]]
+
+df1 <- data.frame(student = f1,grade =f2, year =f3) # same
+
+df1 <- data.frame(L)
+colnames(df1) <- c("student","grade","year") #same
+
+df1
+
+df1[2,]
+df1[,2]
+df1[2:4,]
+
+df1
+write.csv(df1, "data/mydf.csv", row.names=FALSE) # seperated by ,
+#write.csv2(df1,"data/mydf.csv", row.names=FALSE) # seperated by ;
+
+
+
+df2 <- read.csv("mydf.csv")
+identical(df1, df2) #false,strict comparison
+all.equal(df1,df2) # true
+str(df1)
+str(df2)
+

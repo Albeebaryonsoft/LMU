@@ -115,10 +115,14 @@ car_ds
 str(car_ds)
 
 car_ds[car_ds$color == "red", ] # pick the red 
+car_ds[car_ds$price <= 50,"color"] 
 
-
-car_ds[car_ds$price <= 50,"color"]
-car_ds[8,2] <- 100
+car_ds[7,2] <-89
 car_ds
 
+# load data
 
+data <-read.csv("data/framingham.csv")
+head(data)
+str(data)
+data[data$currentSmoker == 1,]

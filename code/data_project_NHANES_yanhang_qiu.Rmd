@@ -1,0 +1,64 @@
+---
+title: "Data Project NHANES"
+author: Yanhang Qiu
+output: html_document
+---
+
+1. Familiarize yourself with the NHANES study design and the variables in the dataset by reading the sections "About the NHANES study" and "The data set" of this document. Use the information provided to answer the following questions: 
+<br><br>
+    a) What are important characteristics of the NHANES study (study design, target population, study objectives, study period, ...)? 
+       - study design: cross-sectional study
+       - target population: recident non-institutionalized US population (adults and childern)
+       - study objectives:to determine the prevalence of major diseases and risk factors, to design health promotion campaigns, and to establish national reference values (e.g. for height, weight, blood pressure). 
+       - study period: This is an ongoing study with data released in bianual cycles.
+       - sampling methods: A four-stage stratified probability cluster sample. 
+       
+    b) What general categories (such as "demographics", "lab results") can the variables in the dataset be sorted into? 
+       - The variables in the dataset can be sorted into demograhics, lab results, self_rated value, disease history, disease now, disease of relative, work, sleep,substance use, food, depression. 
+    
+```{r message=FALSE, warning=FALSE}
+
+data <- read.csv2("../data/NHANES1.csv",row.names = 1)
+    
+
+categories <- list(
+  demographics = c("seqn","age","educ","martlst","male","ethnic","increl","age.cat","age_bin"),
+  lab_results  = c("weight","height","bmi","cd","pb","hg","hdl","rr_sys","rr_dia","logHdl","bmi_cat"),
+  self_rated   = c("srhgnrl","srphbad_prv30d","srmhbad_prv30d","adlimp_prv30d"),
+  disease_history = c("hivpos","asthma_ever","ovrwght_ever","arthrit_ever","stroke_ever","livdis_ever","cancer_ever","heartdis_ever","lungpath_ever"),
+  disease_now = c("asthma_now","cbronch_now","livdis_now","diab_lft"),
+  disease_rel = c("rel_heartdis","rel_asthma","rel_diab"),
+  work = c("hrsworked_prvwk","jobstat_lwk","wrkt_irreg","workpollut"),
+  sleep = c("sleep_dur","sleep_probl"),
+  sub_use = c("cannab_ever","harddrg_ever","alc_lft","drnkprd_prv12mo","cigsprd_prv30d","smokstat","smoke_bin"),
+  food = c("rdyfood_prvmo","frzfood_prvmo","milk_month"),
+  depression = c("phq1","phq2","phq3","phq4","phq5","phq6","phq7","phq8","phq9")
+  
+)
+
+cat_df <- stack(categories)
+names(cat_df) <- c("variable", "category")
+
+summary_table <- data.frame(
+  variable = names(data),                 
+  type = sapply(data, class),
+  missing = colSums(is.na(data)),
+  stringsAsFactors = FALSE
+)
+
+summary_table <- merge(summary_table, cat_df, by = "variable", all.x = TRUE)
+
+summary_table [1:5,]
+```
+<br><br>
+
+2. Using the subsample you have chosen, describe the US population with regards to 
+
+
+    a) Demographic characteristics. How can the strange age distribution be explained? To deal with this problem, recode the age variable into the following categories:18-34, 35-49, 50-64, 65-79, 80 or higher
+
+```{r}
+
+data$age
+```
+

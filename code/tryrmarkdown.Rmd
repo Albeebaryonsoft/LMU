@@ -6,12 +6,13 @@ date: "2025-11-02"
 ---
 # This is a header:
 ## This is a subheader:
+### This is a third level header
 
 This is some text..
 
-- point 1 -
-- point 2 -
-- point 3 -
+- point 1 
+- point 2 
+- point 3 
 
 Formula: $\alpha +\beta^2$
 
@@ -27,5 +28,7 @@ lines(grid, dnorm(grid),col = 3, lwd =2)
 This is another text
 
 <br><br><br>
+<br><br><br>
+<br><br><br> # more space
 
 

@@ -1,0 +1,31 @@
+---
+title: "data_project_NHANES_yanhang_qiu"
+author: Yanhang Qiu
+output: html_document
+date: "2025-11-02"
+---
+# This is a header:
+## This is a subheader:
+
+This is some text..
+
+- point 1 -
+- point 2 -
+- point 3 -
+
+Formula: $\alpha +\beta^2$
+
+```{r}
+x <- rnorm(1000)
+hist(x,breaks = 40,probability = TRUE) #theoretical density, p=true
+
+
+grid <- seq(-4,4,length.out = 1000)
+lines(grid, dnorm(grid),col = 3, lwd =2)
+```
+
+This is another text
+
+<br><br><br>
+
+

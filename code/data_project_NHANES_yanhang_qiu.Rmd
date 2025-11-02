@@ -59,10 +59,7 @@ summary_table [1:5,]
 
 ```{r}
 
-
-
 hist(data$age,main = "Distribution of Age", probability = T)
-
 
 
 ```

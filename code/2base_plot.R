@@ -5,12 +5,7 @@ qpois(0.95,3)
 
 1-ppois(9,3)
 
-dpois(5,3)
-
-ppois(4,1)
-1-ppois(4,1)
-
-
+# Maximise likehood
 n <- 0:6              
 p <- n / 6       
 likelihood <- dbinom(7, size = 10, prob = p)  
@@ -18,63 +13,71 @@ data.frame(n, p, likelihood)
 
 # when n=4, p=4/6, largest likelihood
 
-# ==== plot ====
+
+# ==== dot plot ====
 x <- -5:5        
 y <- x**2       
 plot(x,y,main ="Graphic 1")
 
+x <- fra$BMI
+y <- fra$cigsPerDay
+plot(x,y,main ="Graphic 2")
+
+# ==== histagram ====
+
 hist(sleep$extra, main = "Graphic 3", col="Grey")
+
 hist(sleep$extra, main = "Graphic 4", breaks = 20, col="2")
 
-boxplot(sleep$extra,main="title")
-sleep
+hist(fra$totChol,main = "fra - education", col = "pink",breaks = 10)
 
-boxplot(extra~group,data=sleep, main="Boxplot", ylab= "extra", xlab="group")
+
+# ==== box plot ==== 
+
+boxplot(sleep$extra,main="title")  # one
+
+boxplot(extra~group,data=sleep, main="Boxplot", ylab= "extra", xlab="group") # two 
+
 boxplot(ID~group,data=sleep, main="Boxplot", ylab= "extra", xlab="group")
 
 
-
 fra <- read.csv("data/framingham.csv")
-fra
-boxplot(age ~ male, data = fra,
+
+boxplot(BMI ~ male, data = fra,
         main = "Boxplot 1",
         ylab = "extra",
         xlab = "group")
 
 
-
-boxplot(totChol ~ TenYearCHD, data = fra,
+boxplot(totChol ~ education, data = fra,
         main = "Boxplot 2",
         ylab = "totChol",
-        xlab = "TenYearCHD") + 
+        xlab = "TenYearCHD") 
 
-install.packages("ggplot2")
+# ==== complex ggplot ANY PLOTS====
+
+install.packages("ggplot2", type = "source")
+
 library(ggplot2)
 
 data(iris, package ="datasets")
 
-iris
 ggplot(data = iris, aes(x=Sepal.Length, y=Sepal.Width, color = Petal.Length, shape = Species)) + geom_point()
-fra
+# 除了shape之外都是连续变量
 
-# 按心率区间分箱（可按需要改区间）
-fra$heartRate_cat <- cut(
-  fra$heartRate,
-  breaks = c(-Inf, 60, 70, 80, 90, Inf),
-  labels = c("≤60", "61–70", "71–80", "81–90", "≥91")
-)
-
-ggplot(fra, aes(x = BMI, y = cigsPerDay, color = age, shape = heartRate_cat)) +
+fra$education <- as.factor(fra$education)
+ggplot(fra, aes(x = age, y = heartRate, color = BMI, shape = education)) +
   geom_point(na.rm = TRUE, alpha = 0.8) +
-  labs(x = "BMI", y = "Cigarettes per Day", shape = "Heart Rate", color = "Age") +
+  labs(x = "age", y = "heartrate", shape = "education", color = "BMI") +
   theme_minimal()
+
 
 foo <- function(x) sin(x)+cos(x*0.5)
 
 x <-seq(0, 20, len = 100)
 y <- foo(x)
 g<- ggplot(mapping = aes(x=x,y=y)) + geom_line()
-
+g
 g + geom_area()
 g + geom_point()
 g + geom_line() + geom_area()
@@ -86,31 +89,31 @@ g_point <- g + geom_point()
 g_point_line <- g + geom_point() + geom_line()
 g_point_line_color <- g+ geom_line(aes(color = y), linewidth = 2) + geom_point(color = "darkorange")
 plot_grid(g, g_point, g_point_line, g_point_line_color, nrow =2, ncol =2, lables = "AUTO")
-
+# combine
 
 data <- mtcars
 data$cyl <- as.factor(data$cyl)
-ggplot(data, aes(cyl)) + geom_bar()
+ggplot(data, aes(cyl)) + geom_bar(color = "orange")
 
 data$vs <- as.factor(data$vs)
 ggplot(data, aes(cyl, fill =vs)) + geom_bar()
 ggplot(data, aes(cyl, fill = vs)) + geom_bar(position = "dodge")
- # cyl只能计数
-
 ggplot(iris, aes(Sepal.Length, fill = Species)) + geom_histogram(bins = 20, alpha = 0.3, position ="identity") #what's position
 
 ggplot(iris, aes(x=Species, y=Sepal.Width, fill = Species)) + geom_boxplot()
-
 ggplot(iris, aes(x=Species, y=Sepal.Width, fill = Species)) + geom_violin()
 
 
 # ===== exercise 2=========
+
 x <- sample(1:10, 100, replace = TRUE) # 可以重复抽取 TRUE
 x <- seq(0,10, length.out = 100)
 y <- sin(x)
 plot(x,y,main ="Graphic", pch=20)
 
-ggplot(mapping = aes(x=x,y=y)) + geom_line(lty=2)  ## lty 虚线
+ggplot(mapping = aes(x=x,y=y)) + geom_line(lty=4)  #不同数字，不同线型
+ggplot(mapping = aes(x=x,y=y)) + geom_line(lty=3)
+
 ggplot(mapping = aes(x=x,y=y)) + geom_line() 
 
 # swap the axis
@@ -121,7 +124,7 @@ plot(x,y,main ="Graphic 1", pch=20)
 g<- ggplot(mapping = aes(x=x,y=y)) + geom_line()
 
 plot(x,y)
-lines(x**2,lwd=2)
+lines(x*4,lwd=2)
 
 
 

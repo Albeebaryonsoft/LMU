@@ -59,6 +59,11 @@ summary_table [1:5,]
 
 ```{r}
 
-data$age
+
+
+hist(data$age,main = "Distribution of Age", probability = T)
+
+
+
 ```
 

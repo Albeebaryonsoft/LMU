@@ -15,7 +15,7 @@ a) What are important characteristics of the NHANES study (study design, target 
 b) What general categories (such as "demographics", "lab results") can the variables in the dataset be sorted into? <br>
       The variables in the dataset can be categorized into five main groups: demographic data, examination data, laboratory data, dietary data, and questionnaire data.
     
-```{r message=FALSE, warning=FALSE}
+```{r 1b, message=FALSE, warning=FALSE}
 
 data <- read.csv2("../data/NHANES1.csv",row.names = 1)
 data_raw <- data
@@ -24,8 +24,7 @@ categories <- list(
   demographic_data = c("seqn","age","educ","martlst","male","ethnic","increl","age.cat","age_bin"),
   examination_data  = c("weight","height","bmi","rr_sys","rr_dia","bmi_cat"),
   dietary_data = c("rdyfood_prvmo","frzfood_prvmo","milk_month"),
-  laboratory_data = c("cd","pb","hg","hdl","logHdl","hivpos"),
-  self_rated_health =c("srhgnrl","srphbad_prv30d","srmhbad_prv30d","adlimp_prv30d")
+  laboratory_data = c("cd","pb","hg","hdl","logHdl","hivpos")
 )
 
 categories$questionnaire_data <- setdiff(names(data), unlist(categories))
@@ -44,12 +43,13 @@ summary_table <- merge(summary_table, cat_df, by = "variable", all.x = TRUE)
 summary_table [1:5,]
 ```
 <br>
+
 2. Using the subsample you have chosen, describe the US population with regards to <br>
 
 
     a) Demographic characteristics. How can the strange age distribution be explained? To deal with this problem, recode the age variable into the following categories:18-34, 35-49, 50-64, 65-79, 80 or higher
 
-```{r message=FALSE, warning=FALSE}
+```{r 2a, message=FALSE, warning=FALSE}
 
 library(ggplot2) 
 
@@ -79,21 +79,28 @@ plot_age_cate <-ggplot(data, aes(x=factor(age_group))) + geom_bar(fill = "pink")
 library(patchwork)
 (plot_age | plot_age_cate) 
 ```
-<br>The age distribution in the sample shows limited representativeness of the U.S. population, displaying an approximately uniform count across all age intervals. Despite the complex four-stage sampling design, potential biases may still arise — for example, due to substantial differences in age composition across districts, or because older participants tend to be less willing to respond compared to younger individuals.<br>
+<br> The age distribution in the sample shows limited representativeness of the U.S. population, displaying an approximately uniform count across all age intervals. Despite the complex four-stage sampling design, potential biases may still arise — for example, due to substantial differences in age composition across districts, or because older participants tend to be less willing to respond compared to younger individuals. By grouping participants into age categories, we can reweight each group so that the overall age distribution in the sample better reflects that of the U.S. population.
+<br> 
 
 
   b) When asked about Marital status, some of the participants refused to answer while some didn't know which category they belonged. Hence they were coded differently. Take that into account and recode the variable martlst.
   
-```{r message=FALSE, warning=FALSE}
+```{r 2b, message=FALSE, warning=FALSE}
 
+library(dplyr)
+        
 data <- data %>%
   mutate(martlst = ifelse(is.na(martlst), 77, martlst))
+
+data %>%
+  count(martlst) %>%
+  mutate(perc = round(100 * n / sum(n), 1))
 
 ```
 
   c) Self-rated health. Looking at the results of your descriptive analysis, what do you have to consider when interpreting the results?
   
-```{r message=FALSE, warning=FALSE}
+```{r 2c1, message=FALSE, warning=FALSE}
 
 
 library(scales)
@@ -129,13 +136,13 @@ Such missingness may be systematic rather than random, potentially resulting fro
 
 To examine this potential bias, we hypothesized that the missingness pattern differs across age, gender, income, depression level, and HIV status.
   
-```{r}
+```{r 2c2, message=FALSE, warning=FALSE}
 
 library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(knitr)
-
+library(broom)
 
 self_vars <- c("srhgnrl","srphbad_prv30d","srmhbad_prv30d","adlimp_prv30d")
 depr_vars <- paste0("phq", 1:9)
@@ -150,7 +157,13 @@ self_health <- data %>%
       phq_total <= 9  ~ "Mild",
       phq_total <= 14 ~ "Moderate",
       phq_total <= 19 ~ "Moderately severe",
-      TRUE            ~ "Severe"
+      TRUE            ~ "Severe" 
+      ),
+
+    dep_group = factor(
+      dep_group,
+      levels = c("None-minimal", "Mild", "Moderate", "Moderately severe", "Severe"),
+      ordered = TRUE
     )
   )
 
@@ -158,6 +171,7 @@ self_health <- self_health %>%
   mutate(missing_self = if_else(
     rowSums(is.na(select(., all_of(self_vars)))) > 0, 1, 0
   ))
+
 
 by_gender <- self_health %>%
   group_by(male) %>%
@@ -177,6 +191,7 @@ by_age <- self_health %>%
   ) %>%
   mutate(group = "Age Group")
 
+# na included
 by_increl <- self_health %>%
   group_by(increl) %>%
   summarise(
@@ -193,35 +208,65 @@ by_dep <- self_health %>%
     pct_missing = round(100 * n_missing / n, 1)
   )
 
-by_hiv <- self_health %>%
-  group_by(hivpos) %>%
-  summarise(
-    n = n(),
-    n_missing = sum(missing_self),
-    pct_missing = round(100 * n_missing / n, 1)
-  )
 
 by_gender
-chisq.test(table(self_health$male, self_health$missing_self))
-
 by_age
-chisq.test(table(self_health$age_group, self_health$missing_self))
-
 by_increl
-chisq.test(table(self_health$increl, self_health$missing_self), simulate.p.value = TRUE)
+by_dep 
 
-by_dep
-chisq.test(table(self_health$dep_group, self_health$missing_self))
-# chisq.test(table(self_health$increl, self_health$missing_self))
+chisq.test(table(self_health$male,       self_health$missing_self, useNA = "ifany"))
+chisq.test(table(self_health$age_group,  self_health$missing_self, useNA = "ifany"))
+chisq.test(table(self_health$dep_group,  self_health$missing_self, useNA = "ifany"))
 
-by_hiv
-chisq.test(table(self_health$hivpos, self_health$missing_self))
+chisq.test(table(self_health$increl,self_health$missing_self,useNA = "ifany"))
+chisq.test(table(self_health$increl,self_health$missing_self))
+
+
+
+
 
 ```
 
-Chi-square tests confirmed that, except for HIV status, all other four variables were significantly associated with missingness.Therefore, the missing data cannot be considered "Missing Completely At Random (MCAR)".Deleting observations with missing values could introduce selection bias, and thus, appropriate methods such as multiple imputation or inclusion of missing indicators should be applied to handle these data appropriately.<br>
+Chi-square tests confirmed that age group, gender, depression status and income were significantly associated with missingness.Therefore, the missing data cannot be considered "Missing Completely At Random (MCAR)".Deleting observations with missing values could introduce selection bias, and thus, appropriate methods such as multiple imputation or inclusion of missing indicators should be applied to handle these data appropriately.<br>
 
 
 3. Diabetes and ethnicity
+
+    a) How is the diabetes status distributed in your data set? Summarize the 2 diabetes groups in a single group and recode the variable for diabetes status into two groups: non-diabetes and diabetes. Give an interval estimate for diabetes in your data set.
+  
+```{r 3a, message=FALSE, warning=FALSE}
+
+table(data$diab_lft, useNA = "ifany")
+table(data$diab_lft)
+barplot(table(data$diab_lft))
+
+data <- data %>%
+  mutate(
+    diabetes_status = case_when(
+      diab_lft == 1 ~ "non_diabetes",
+      diab_lft == 2 | diab_lft == 3 ~ "diabetes",
+      TRUE ~ NA_character_
+    )
+  )
+
+table(data$diabetes_status, useNA = "ifany")
+barplot( table(data$diabetes_status))
+
+library(broom)
+
+x <- sum(data$diabetes_status == "diabetes", na.rm = TRUE)
+n <- sum(!is.na(data$diabetes_status))
+
+result <- binom.test(x, n)
+tidy(result)
+
+```
+
+The vast majority of participants fall into category 1, indicating that most individuals are non-diabetic. A smaller fraction (category 3) are diabetic, and very few are prediabetic  (category 2).
+<br>
+
+Based on our data, the estimated proportion of individuals with diabetes is about 12.8%. The 95% confidence interval ranges from 11.9% to 13.8%, meaning that if you repeated this sampling many times, 95% of such intervals would contain the true population proportion of diabetes.
+
+    b) Work with the recoded variable. Use an appropriate statistical test to test the relation between diabetes status and ethnicity. Inteprete the results of the test. 
 
 

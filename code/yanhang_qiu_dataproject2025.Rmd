@@ -236,6 +236,8 @@ Chi-square tests confirmed that age group, gender, depression status and income 
   
 ```{r 3a, message=FALSE, warning=FALSE}
 
+library(dplyr)
+
 table(data$diab_lft, useNA = "ifany")
 table(data$diab_lft)
 barplot(table(data$diab_lft))
@@ -257,16 +259,47 @@ library(broom)
 x <- sum(data$diabetes_status == "diabetes", na.rm = TRUE)
 n <- sum(!is.na(data$diabetes_status))
 
-result <- binom.test(x, n)
-tidy(result)
+CI_CP<- binom.test(x, n, conf.level = 0.95) # method 1: Clopper-Pearson
+tidy(CI_CP)
+
+install.packages("binom")
+library(binom)
+
+binom.confint(x,n, conf.level = 0.95, methods = "wilson") # method 2: Wilson
+
+
+
+
+
 
 ```
 
 The vast majority of participants fall into category 1, indicating that most individuals are non-diabetic. A smaller fraction (category 3) are diabetic, and very few are prediabetic  (category 2).
 <br>
 
-Based on our data, the estimated proportion of individuals with diabetes is about 12.8%. The 95% confidence interval ranges from 11.9% to 13.8%, meaning that if you repeated this sampling many times, 95% of such intervals would contain the true population proportion of diabetes.
+Based on our data, the estimated proportion of individuals with diabetes is about 12.8%. The CI are consistent using both methods: the 95% confidence interval ranges from 11.9% to 13.8%, meaning that if you repeated this sampling many times, 95% of such intervals would contain the true population proportion of diabetes.
 
     b) Work with the recoded variable. Use an appropriate statistical test to test the relation between diabetes status and ethnicity. Inteprete the results of the test. 
+```{r}
+
+
+data$diabetes_status <- factor(data$diabetes_status)
+data$ethnic <- factor(data$ethnic)
+
+tab <- table(data$diabetes_status, data$ethnic)
+tab
+
+
+chisq.test(tab)
+
+
+```
+As diabetes_status is binomial variable and ethnicity is a nominal variable. We use chi-square test to exam their relationship. Results show that there is significant association (p = 7.296e-08 <0.05) between diabetes status and ethinicty. 
+
+
+4. Weekly working hours and self-evaluated health status
+
+    a) The variable `hrsworked_prvwk` codes the number of weekly working hours. 77777 or 99999 are missing values. Recode these missing values with a proper value, e.g. NA.
+    
 
 

@@ -301,5 +301,6 @@ As diabetes_status is binomial variable and ethnicity is a nominal variable. We 
 
     a) The variable `hrsworked_prvwk` codes the number of weekly working hours. 77777 or 99999 are missing values. Recode these missing values with a proper value, e.g. NA.
     
+hist(data$hrsworked_prvwk)
 
 

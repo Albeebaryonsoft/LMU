@@ -3,18 +3,25 @@ title: "Data Project NHANES 2025"
 author: Yanhang Qiu
 output: html_document
 ---
-1. Familiarize yourself with the NHANES study design and the variables in the dataset by reading the sections "About the NHANES study" and "The data set" of this document. Use the information provided to answer the following questions: 
 
-a) What are important characteristics of the NHANES study (study design, target population, study objectives, study period, ...)? 
-      - study design: cross-sectional study
-      - target population: recident non-institutionalized US population (adults and childern)
-      - study objectives:to determine the prevalence of major diseases and risk factors, to design health promotion campaigns, and to establish national reference values (e.g. for height, weight, blood pressure). 
-      - study period: This is an ongoing study with data released in bianual cycles.
-      - sampling methods: A four-stage stratified probability cluster sample. <br>
-       
-b) What general categories (such as "demographics", "lab results") can the variables in the dataset be sorted into? <br>
-      The variables in the dataset can be categorized into five main groups: demographic data, examination data, laboratory data, dietary data, and questionnaire data.
-    
+1.  Familiarize yourself with the NHANES study design and the variables in the dataset by reading the sections "About the NHANES study" and "The data set" of this document. Use the information provided to answer the following questions:
+
+2.  What are important characteristics of the NHANES study (study design, target population, study objectives, study period, ...)?
+
+**Answer to 1a:**
+
+-   Study design: cross-sectional study - target population: recident non-institutionalized US population (adults and childern)
+
+-   Study objectives: to determine the prevalence of major diseases and risk factors, to design health promotion campaigns, and to establish national reference values (e.g. for height, weight, blood pressure).
+
+-   Study period: This is an ongoing study with data released in bianual cycles.
+
+-   Sampling methods: A four-stage stratified probability cluster sample.
+
+b)  What general categories (such as "demographics", "lab results") can the variables in the dataset be sorted into?
+
+    **Answer to 1b:** The variables in the dataset can be categorized into five main groups: demographic data, examination data, laboratory data, dietary data, and questionnaire data.
+
 ```{r 1b, message=FALSE, warning=FALSE}
 
 data <- read.csv2("../data/NHANES1.csv",row.names = 1)
@@ -41,23 +48,28 @@ summary_table <- data.frame(
 summary_table <- merge(summary_table, cat_df, by = "variable", all.x = TRUE)
 
 summary_table [1:5,]
+
+
+
 ```
-<br>
 
-2. Using the subsample you have chosen, describe the US population with regards to <br>
+2.  Using the subsample you have chosen, describe the US population with regards to
 
+    a)  Demographic characteristics. How can the strange age distribution be explained? To deal with this problem, recode the age variable into the following categories:18-34, 35-49, 50-64, 65-79, 80 or higher.
 
-    a) Demographic characteristics. How can the strange age distribution be explained? To deal with this problem, recode the age variable into the following categories:18-34, 35-49, 50-64, 65-79, 80 or higher
+The age distribution in the sample shows limited representativeness of the U.S. population, displaying an approximately uniform count across all age intervals. Despite the complex four-stage sampling design, potential biases may still arise — for example, due to substantial differences in age composition across districts, or because older participants tend to be less willing to respond compared to younger individuals. By grouping participants into age categories, we can reweight each group so that the overall age distribution in the sample better reflects that of the U.S. population.
 
 ```{r 2a, message=FALSE, warning=FALSE}
-
 library(ggplot2) 
 
 plot_age <- ggplot(data, aes(x = age)) +
   geom_histogram(fill = "pink", color = "white",bins = 30) +
   labs(title = "age",x = "Age",y = "Count") +
   theme_minimal()
+```
 
+
+```{r 2a, message=FALSE, warning=FALSE}
 library(dplyr)
 data <- data %>%
   mutate(
@@ -70,7 +82,10 @@ data <- data %>%
       age >= 80 ~ "80+"
     )
   )
+```
 
+
+```{r 2a, message=FALSE, warning=FALSE}
 plot_age_cate <-ggplot(data, aes(x=factor(age_group))) + geom_bar(fill = "pink") + 
   labs(title = "age_group", x = "Age Group", y = "Count") +
   theme_minimal()
@@ -79,27 +94,29 @@ plot_age_cate <-ggplot(data, aes(x=factor(age_group))) + geom_bar(fill = "pink")
 library(patchwork)
 (plot_age | plot_age_cate) 
 ```
-<br> The age distribution in the sample shows limited representativeness of the U.S. population, displaying an approximately uniform count across all age intervals. Despite the complex four-stage sampling design, potential biases may still arise — for example, due to substantial differences in age composition across districts, or because older participants tend to be less willing to respond compared to younger individuals. By grouping participants into age categories, we can reweight each group so that the overall age distribution in the sample better reflects that of the U.S. population.
-<br> 
+
+b)  When asked about Marital status, some of the participants refused to answer while some didn't know which category they belonged. Hence they were coded differently. Take that into account and recode the variable martlst.
+
+Before recoding martlst the requency of 77 and 99 are 267 and 1 respectively.
+After recoding the missing value into NA, there are 268 NAs in total.
 
 
-  b) When asked about Marital status, some of the participants refused to answer while some didn't know which category they belonged. Hence they were coded differently. Take that into account and recode the variable martlst.
-  
 ```{r 2b, message=FALSE, warning=FALSE}
 
-library(dplyr)
-        
 data <- data %>%
-  mutate(martlst = ifelse(is.na(martlst), 77, martlst))
+  mutate(
+    martlst_clean = na_if(martlst, 77),
+    martlst_clean = na_if(martlst_clean, 99)
+  )
 
-data %>%
-  count(martlst) %>%
-  mutate(perc = round(100 * n / sum(n), 1))
+table(data$martlst)
+table(data$martlst_clean, useNA = "ifany")
 
 ```
 
-  c) Self-rated health. Looking at the results of your descriptive analysis, what do you have to consider when interpreting the results?
-  
+
+c)  Self-rated health. Looking at the results of your descriptive analysis, what do you have to consider when interpreting the results?
+
 ```{r 2c1, message=FALSE, warning=FALSE}
 
 
@@ -129,13 +146,13 @@ library(patchwork)
 (p1 | p2) / (p3 | p4)   # 上下排列输出
 
 ```
-  
+
 According to the bar charts, participants generally reported positive self-assessments of their overall, physical, and mental health during the past 30 days. However, a substantial proportion of missing values (>10%) was observed among the four self-rated health variables.
 
 Such missingness may be systematic rather than random, potentially resulting from factors such as privacy concerns, social desirability bias, or poor physical and mental health conditions that prevent individuals from completing self-rating questions.
 
 To examine this potential bias, we hypothesized that the missingness pattern differs across age, gender, income, depression level, and HIV status.
-  
+
 ```{r 2c2, message=FALSE, warning=FALSE}
 
 library(dplyr)
@@ -229,11 +246,10 @@ chisq.test(table(self_health$increl,self_health$missing_self))
 
 Chi-square tests confirmed that age group, gender, depression status and income were significantly associated with missingness.Therefore, the missing data cannot be considered "Missing Completely At Random (MCAR)".Deleting observations with missing values could introduce selection bias, and thus, appropriate methods such as multiple imputation or inclusion of missing indicators should be applied to handle these data appropriately.<br>
 
+3.  Diabetes and ethnicity
 
-3. Diabetes and ethnicity
+    a)  How is the diabetes status distributed in your data set? Summarize the 2 diabetes groups in a single group and recode the variable for diabetes status into two groups: non-diabetes and diabetes. Give an interval estimate for diabetes in your data set.
 
-    a) How is the diabetes status distributed in your data set? Summarize the 2 diabetes groups in a single group and recode the variable for diabetes status into two groups: non-diabetes and diabetes. Give an interval estimate for diabetes in your data set.
-  
 ```{r 3a, message=FALSE, warning=FALSE}
 
 library(dplyr)
@@ -274,12 +290,14 @@ binom.confint(x,n, conf.level = 0.95, methods = "wilson") # method 2: Wilson
 
 ```
 
-The vast majority of participants fall into category 1, indicating that most individuals are non-diabetic. A smaller fraction (category 3) are diabetic, and very few are prediabetic  (category 2).
-<br>
+The vast majority of participants fall into category 1, indicating that most individuals are non-diabetic. A smaller fraction (category 3) are diabetic, and very few are prediabetic (category 2). <br>
 
 Based on our data, the estimated proportion of individuals with diabetes is about 12.8%. The CI are consistent using both methods: the 95% confidence interval ranges from 11.9% to 13.8%, meaning that if you repeated this sampling many times, 95% of such intervals would contain the true population proportion of diabetes.
 
-    b) Work with the recoded variable. Use an appropriate statistical test to test the relation between diabetes status and ethnicity. Inteprete the results of the test. 
+```         
+b) Work with the recoded variable. Use an appropriate statistical test to test the relation between diabetes status and ethnicity. Inteprete the results of the test. 
+```
+
 ```{r}
 
 
@@ -292,15 +310,81 @@ tab
 
 chisq.test(tab)
 
+```
+
+As diabetes_status is binomial variable and ethnicity is a nominal variable. We use chi-square test to exam their relationship. Results show that there is significant association (p = 7.296e-08 \<0.05) between diabetes status and ethinicty.
+
+4.  Weekly working hours and self-evaluated health status
+
+    a)  The variable `hrsworked_prvwk` codes the number of weekly working hours. 77777 or 99999 are missing values. Recode these missing values with a proper value, e.g. NA.
+
+```{r}
+
+table(data$hrsworked_prvwk)
+data <- data %>%
+  mutate(
+    hrsworked_prvwk_clean = na_if(hrsworked_prvwk, 77777),
+    hrsworked_prvwk_clean = na_if(hrsworked_prvwk_clean, 99999)
+  )
+
+table(data$hrsworked_prvwk_clean)
 
 ```
-As diabetes_status is binomial variable and ethnicity is a nominal variable. We use chi-square test to exam their relationship. Results show that there is significant association (p = 7.296e-08 <0.05) between diabetes status and ethinicty. 
+ b) Recode the variable `hrsworked_prvwk` into categories [,40), [40,) weekly working hours. Number or name the categories properly. (Hint: Set the new variable as a factor variable, if necessary)
+ 
+ 
+```{r}
+library(dplyr)
 
 
-4. Weekly working hours and self-evaluated health status
 
-    a) The variable `hrsworked_prvwk` codes the number of weekly working hours. 77777 or 99999 are missing values. Recode these missing values with a proper value, e.g. NA.
-    
-hist(data$hrsworked_prvwk)
 
+
+
+
+
+
+
+data <- data %>%
+  mutate(
+    age_group = case_when(
+      age < 18 ~ "0-17",
+      age >= 18 & age < 35 ~ "18-34",
+      age >= 35 & age < 50 ~ "35-49",
+      age >= 50 & age < 65 ~ "50-64",
+      age >= 65 & age < 80 ~ "65-79",
+      age >= 80 ~ "80+"
+    )
+  )
+
+data <- data %>%
+  mutate(
+    diabetes_status = case_when(
+      diab_lft == 1 ~ "non_diabetes",
+      diab_lft == 2 | diab_lft == 3 ~ "diabetes",
+      TRUE ~ NA_character_
+    )
+  )
+
+
+self_health <- data %>%
+  select(seqn, hivpos, age_group, male, increl,
+         all_of(self_vars), all_of(depr_vars)) %>%
+  mutate(
+    phq_total = rowSums(across(all_of(depr_vars)), na.rm = TRUE),
+    dep_group = case_when(
+      phq_total <= 4  ~ "None-minimal",
+      phq_total <= 9  ~ "Mild",
+      phq_total <= 14 ~ "Moderate",
+      phq_total <= 19 ~ "Moderately severe",
+      TRUE            ~ "Severe" 
+      ),
+
+    dep_group = factor(
+      dep_group,
+      levels = c("None-minimal", "Mild", "Moderate", "Moderately severe", "Severe"),
+      ordered = TRUE
+    )
+  )
+```
 

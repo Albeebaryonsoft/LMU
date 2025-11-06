@@ -149,8 +149,29 @@ boxplot(df$x, data = df,
 # rnorm, rexp, sample(), rep()
 
 
+# excercise 3
+dat <- Orange
+dat
+
+tree_colors <- as.numeric(Orange$Tree)
+tree_colors
 
 
+palette_colors <- rainbow(length(unique(Orange$Tree)))
+palette_colors
+
+plot(Orange$age, Orange$circumference,
+     col = palette_colors, pch= 16, title = "Tree", xlab = "age", ylab = "circumference", main = "Orange Tree Growth")
+
+legend("topleft",legend = levels(Orange$Tree), col = palette_colors ,pch=16, title = "Tree")
+
+library(ggplot2)
+
+if(!requireNamespace("ggplot2", quietly == TRUE)) 
+install.packages("ggplot2")
+library(ggplot2)
+ggplot(Orange, aes(age, circumference, color = Tree)) + geom_point()
+ggplot(Orange, aes(age, circumference, color = Tree)) + geom_line()
 
 
 

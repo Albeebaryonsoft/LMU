@@ -388,3 +388,4 @@ self_health <- data %>%
   )
 ```
 
+   c) Plot weekly working hours against selft-evaluated health status using mosaic plot. Looking at the plot, what would you tell about the relation between these two variables.

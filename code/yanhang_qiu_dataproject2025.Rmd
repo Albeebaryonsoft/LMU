@@ -336,15 +336,6 @@ table(data$hrsworked_prvwk_clean)
 ```{r}
 library(dplyr)
 
-
-
-
-
-
-
-
-
-
 data <- data %>%
   mutate(
     age_group = case_when(

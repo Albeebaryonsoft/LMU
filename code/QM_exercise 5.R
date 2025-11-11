@@ -77,6 +77,25 @@ F_upper <- F_stat / qf(alpha/2, df1, df2)
 CI <- c(F_lower, F_upper)
 CI
 
+# problem 3
+# paired t 参数可调整版
+
+dbar <- 0.199      
+sd_d <- sqrt(0.0568)   
+n <- 15
+alpha <- 0.05
+
+SE <- sd_d / sqrt(n)
+df <- n - 1
+t_stat <- dbar / SE
+p_value <- 2*(1 - pt(abs(t_stat), df))
+
+tcrit <- qt(1 - alpha/2, df)
+CI <- c(dbar - tcrit * SE, dbar + tcrit * SE)
+
+t_stat; p_value; CI
+
+
 
 
 

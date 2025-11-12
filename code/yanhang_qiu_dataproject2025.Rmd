@@ -20,11 +20,11 @@ a)  What are important characteristics of the NHANES study (study design, target
 
 -   Sampling methods: A four-stage stratified probability cluster sample.
 
-b)  What general categories (such as "demographics", "lab results") can the variables in the dataset be sorted into?
+b\. What general categories (such as "demographics", "lab results") can the variables in the dataset be sorted into?
 
-    **Answer to 1b:**
+**Answer to 1b:**
 
-    The variables in the dataset can be categorized into five main groups: demographic data, examination data, laboratory data, dietary data, and questionnaire data.
+The variables in the dataset can be categorized into five main groups: demographic data, examination data, laboratory data, dietary data, and questionnaire data.
 
 ```{r 1b, message=FALSE, warning=FALSE}
 

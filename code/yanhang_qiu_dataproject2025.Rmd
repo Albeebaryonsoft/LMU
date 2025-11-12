@@ -486,28 +486,33 @@ a\. How strong is the relationship between BMI and HDL (the "good" cholesterol)?
 ```{r}
 
 model <- lm(hdl ~ bmi, data = data)
-
 summary(model)
 
-r_squared <- summary(model)$r.squared
-r_squared
-
-
-adj_r_squared <- summary(model)$adj.r.squared
-adj_r_squared
-
 ```
+
 **Answer to 6a :**
 
-The linear regression model showed a statistically significant negative association between BMI and HDL cholesterol (β = –0.015, p < 0.001).
+The linear regression model showed a statistically significant negative association between BMI and HDL cholesterol (β = –0.015, p \< 0.001).
 
 However, the explanatory power of the model was limited: only 7.7% variation (R² = 0.077) in HDL can be explained by variation in BMI, indicating that BMI alone accounts for only a small proportion of the variability in HDL, and other factors, e.g., age, likely play major roles.
 
 Since this was a simple (single-variable) regression, the adjusted R² was nearly identical to the unadjusted R² and therefore not further discussed.
 
 
+**Answer to 6a (continued) :**
+
+
+```{r}
+
+sum(is.na(data$hdl))
+sum(is.na(data$bmi))
+sum(!complete.cases(data[, c("hdl","bmi")]))
+
+t.test (age 
+```
 
 b\. Does the relationship between HDL and BMI change when you adjust for age (categorized)? Interpret the coefficients of the resulting model (when you mean-center BMI before fitting the model, you can also interpret the intercept). Would you say that BMI has a clinically relevant impact on HDL, according to your model?
+
 
 ```{r}
 
@@ -515,16 +520,17 @@ model_controlled <- lm(hdl ~ bmi + age, data = data)
 summary(model_controlled)
 
 ```
+**Answer to 6b :**
+
+After adding age as a control variable, R-squared improved from 0.07721 to 0.08615, and the adjusted R-squared showed a similar patter (from 0.077 to 0.0857), indicating a modest but genuine improvement in explanatory power. BMI remained a statistically negative predictor of HDL, and its coefficient become marginally stronger, suggesting that controlling for age reduced confounding and revealed a more robust independent association between BMI and HDL.
+
+**Answer to 6b (continued):**
+```{r}
+
+```
 
 
 c\. Try to find a better model to predict HDL by including more covariates. Select a number of candidate covariates which in your opinion may be related to HDL, and then choose a model selection strategy and a criterion/test for comparing models. Describe the model with the best fit according to your search, and interpret the model coefficients.
-
-
-
-
-
-
-
 
 7.Cancer
 

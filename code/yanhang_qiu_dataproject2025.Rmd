@@ -53,6 +53,7 @@ summary_table <- merge(summary_table, cat_df, by = "variable", all.x = TRUE)
 
 summary_table [1:5,]
 
+
 ```
 
 2\. Using the subsample you have chosen, describe the US population with regards to:
@@ -115,6 +116,7 @@ table(data$martlst_clean, useNA = "ifany")
 **Answer to 2b:**
 
 Before recoding martlst the requency of 77 and 99 are 267 and 1 respectively.After recoding the missing value into NA, there are 268 NAs in total.
+
 
 c\. Self-rated health. Looking at the results of your descriptive analysis, what do you have to consider when interpreting the results?
 
@@ -239,7 +241,11 @@ The vast majority of participants fall into category 1, indicating that most ind
 
 Based on our data, the estimated proportion of individuals with diabetes is about 12.8%. The CI are consistent using two methods : Wilson and Clopper-Pearson methods. The 95% confidence interval ranges approximately from 11.9% to 13.8 in both methods, meaning that if you repeated this sampling many times, 95% of such intervals would contain the true population proportion of diabetes.
 
-b\. Work with the recoded variable. Use an appropriate statistical test to test the relation between diabetes status and ethnicity. Inteprete the results of the test.
+However, diabetes status was missing for 308 individuals. Since the analysis excluded these cases, the estimated prevalence and confidence interval reflect only the observed sample and may not fully represent the entire study population.
+
+
+
+b\. Work with the recoded variable. Use an appropriate statistical test to test the relation between diabetes status and ethnicity. Interpret the results of the test.
 
 ```{r}
 
@@ -253,9 +259,29 @@ chisq.test(tab)
 
 ```
 
+```{r}
+library(dplyr)
+
+data <- data %>%
+  mutate(
+    diabetes_missing = ifelse(is.na(diabetes_status), "Missing", "Observed"),
+    ethnic = factor(ethnic)
+  )
+
+
+tab_miss <- table(data$diabetes_missing, data$ethnic)
+tab_miss
+
+chisq.test(tab_miss)
+
+```
+
 **Answer to 3b :**
 
 As diabetes_status is binomial variable and ethnicity is a nominal variable, we use chi-square test to exam their relationship. Results show that there is significant association (p = 7.296e-08 \<0.05) between diabetes status and ethinicty.
+
+The chi-square test examining the association between diabetes status missingness and ethnicity yielded a non-significant result (χ²(3) = 1.05, p = 0.79). Therefore, the missing data on diabetes status are likely to be missing at random with respect to ethnicity, and excluding these missing cases from the analysis is unlikely to bias the estimated association between diabetes status and ethnicity.
+
 
 4\. Weekly working hours and self-evaluated health status
 
@@ -269,67 +295,151 @@ data <- data %>%
     hrsworked_prvwk_clean = na_if(hrsworked_prvwk_clean, 99999)
   )
 
-table(data$hrsworked_prvwk,useNA = "ifany")
+sum(is.na(data$hrsworked_prvwk_clean))        # 缺失数量
+mean(is.na(data$hrsworked_prvwk_clean)) * 100 # 缺失比例（百分比）
+
+
+data$missing_hrs <- ifelse(is.na(data$hrsworked_prvwk_clean), "Missing", "Observed")
+data$missing_srh <- ifelse(is.na(data$srhgnrl), "Missing", "Observed")
+
+tab <- table(data$missing_hrs, data$missing_srh)
+tab
+chisq.test(tab)
+
 ```
 
 **Answer to 4a :**
 
-In variable `hrsworked_prvwk` there are 2 77777, 1 99999 and 2474 NA values. After recoding 77777 and 99999 to NA, there are 2477 NA in total.
+In variable `hrsworked_prvwk` there are 2 77777, 1 99999 and 2474 NA values. After recoding 77777 and 99999 to NA, there are 2477 missing values in total.
+
+Although the missingness of weekly working hours and self-rated health appeared to be random (χ² = 0.71, p = 0.399), the proportion of missing data for weekly working hours was very high (49.54%).
+
+To minimize potential information loss and improve the robustness of the analyses, multiple imputation was performed.After multiple imputation, the newly created dataset contained no missing values (number of missing values = 0). In the following analyses, both the original (non-imputed) and imputed datasets were retained and analyzed in parallel for comparison.
+
+```{r}
+library(mice)
+
+
+vars <- c("srhgnrl", "hrsworked_prvwk_clean", "age", "male", "bmi")
+imp_data <- data[, vars]
+
+pred <- make.predictorMatrix(imp_data)
+
+pred["hrsworked_prvwk_clean", "srhgnrl"] <- 0  
+pred["srhgnrl", "hrsworked_prvwk_clean"] <- 0  
+
+pred[c("srhgnrl", "hrsworked_prvwk_clean"), c("srhgnrl", "hrsworked_prvwk_clean")]
+
+imp <- mice(imp_data, m = 5, method = "pmm", predictorMatrix = pred, seed = 123)
+
+completed1 <- complete(imp, 1)
+head(completed1)
+
+colSums(is.na(completed1))
+
+imp_long <- complete(imp, "long", include = FALSE)
+head(imp_long)
+
+```
+
 
 b\. Recode the variable `hrsworked_prvwk` into categories [,40), [40,) weekly working hours. Number or name the categories properly. (Hint: Set the new variable as a factor variable, if necessary)
 
 ```{r 4b message=FALSE, warning=FALSE}
-library(dplyr)
 
-table(data$hrsworked_prvwk_clean)
+library(dplyr)
 
 data <- data %>%
   mutate(
     hrsworked_prvwk_cat = case_when(
-      is.na(hrsworked_prvwk_clean) ~ NA_character_,   # 把 NA 明确保留
+      is.na(hrsworked_prvwk_clean) ~ NA_character_,   
       hrsworked_prvwk_clean < 40 ~ "< 40",
       hrsworked_prvwk_clean >= 40 ~ ">= 40"
     )
   )
 
 table(data$hrsworked_prvwk_cat,useNA = "ifany")
+
+
+
+completed1 <- complete(imp, 1)
+
+completed1 <- completed1 %>%
+  mutate(
+    hrs_cat = cut(hrsworked_prvwk_clean,
+                  breaks = c(0, 40, Inf),
+                  labels = c("<40", "≥40"),
+                  right = FALSE)
+  )
+
+table(completed1$hrs_cat,useNA = "ifany")
+
 ```
 
 **Answer to 4b :**
 
-After categorizing the variable, there are 846 people working less than 40 hours previous week, 1677 people working more than 40 hours previous week, and still, there are 2477 missing values.
+Before multiple imputation, there are 846 people working less than 40 hours previous week, 1677 people working more than 40 hours previous week, and still, there are 2477 missing values.
+
+After multiple imputation and subsequent categorization, there were 1,743 individuals working less than 40 hours in the previous week and 3,257 individuals working 40 hours or more. No missing values remained in the imputed dataset.
+
 
 c\. Plot weekly working hours against self-evaluated health status using mosaic plot. Looking at the plot, what would you tell about the relation between these two variables.
 
-**Answer to 4c :** According to the mosaic plot, the distribution of self-rated health levels is similar across the two working-hour groups (\< 40 vs. ≥ 40 hours).
 
 ```{r 4c message=FALSE, warning=FALSE }
 
-mosaicplot(table(data$srhgnrl, data$hrsworked_prvwk_cat), color = TRUE, main = "Mosaic Plot") # 更鲜明的红蓝色差异
+mosaicplot(table(data$srhgnrl, data$hrsworked_prvwk_cat), color = TRUE, main = "Mosaic plot: self-rated health vs weekly working hours (with missing values)") 
+
+
+mosaicplot(table(completed1$srhgnrl, completed1$hrs_cat),
+           color = TRUE,
+           main = "Mosaic plot: self-rated health vs weekly working hours (imputed data)")
 
 ```
+**Answer to 4c :** According to the mosaic plot, the distribution of self-rated health levels is similar across the two working-hour groups (\< 40 vs. ≥ 40 hours). Visually, there is no substantial difference between the plots before and after multiple imputation.
+
+
 
 d\. Use an appropriate statistical test to test for the statistical significance of this relation. Interpret the results of the test.
 
 ```{r 4d message=FALSE, warning=FALSE }
 
 d1 <- subset(data, !is.na(srhgnrl) & !is.na(hrsworked_prvwk_cat))
-tab <- table(d1$srhgnrl, d1$hrsworked_prvwk_cat)
-tab
-chisq.test(tab)
+tab1 <- table(d1$srhgnrl, d1$hrsworked_prvwk_cat)
+chisq.test(tab1)
 
-d2 <- subset(data, !is.na(srhgnrl) & !is.na(hrsworked_prvwk_clean))
+tab2 <- table(completed1$srhgnrl, completed1$hrs_cat)
+chisq.test(tab2)
+
+
+
+d3 <- subset(data, !is.na(srhgnrl) & !is.na(hrsworked_prvwk_clean))
 cor.test(d2$hrsworked_prvwk_clean, d2$srhgnrl,
          method = "spearman", exact = FALSE)
 
+d4 <-cor.test(completed1$hrsworked_prvwk_clean, 
+         as.numeric(as.character(completed1$srhgnrl)), 
+         method = "spearman", 
+         exact = FALSE)
+
+
+d3;d4
 
 ```
 
+
 **Answer to 4b :**
 
-The chi-square test was used to assess whether self-rated health status differs between participants working fewer than 40 hours per week and those working 40 hours or more. The test indicated no statistically significant association between weekly working hours (\< 40 vs. ≥ 40 hours) and self-rated health (χ² ≈ 3.24, df = 4, p ≈ 0.52). Therefore, based on this dataset, weekly working hours (\< 40 vs. ≥ 40 hours) do not appear to be related to how individuals evaluate their overall health.
+Due to concerns about the large amount of missing data, both weekly working hours and self-rated health were imputed.
+Before imputation, no significant association was observed (χ² = 3.25, p = 0.52; ρ = –0.038, p = 0.082).
 
-Although the mosaic plot analysis required categorizing weekly working hours into two groups (\<40 vs. ≥40 hours), this grouping may reduce variability and potentially mask underlying trends. To address this concern, we additionally examined the relationship while preserving the continuous form of weekly working hours. The Spearman rank correlation between weekly working hours and self-rated health was very small and not statistically significant (ρ = -0.04, p = 0.08). This also indicates that there is no clear monotonic relationship between the number of hours worked per week and participants’ self-evaluated health status in this sample.
+After imputation, the results remained non-significant (χ² = 8.28, p = 0.082; ρ = –0.008, p = 0.59).
+Although the significance levels slightly differed before and after imputation, both analyses consistently indicated no significant relationship between the two variables.
+
+Therefore, the influence of missing data on the overall conclusion appears minimal, and the association between weekly working hours and self-rated health remains statistically non-significant.
+
+
+
 
 5\. Blood mercury level (umol/L) and gender
 
@@ -471,6 +581,10 @@ var.test(hg ~ male, data = data)
 t.test(hg ~ male, data = data, var.equal = FALSE,conf.level = 0.99)
 wilcox.test(hg ~ male, data = data, conf.level = 0.99,conf.int = TRUE)
 
+
+
+sum(is.na(data$hg))
+
 ```
 
 **Answer to 5b (continued) :**
@@ -478,6 +592,9 @@ wilcox.test(hg ~ male, data = data, conf.level = 0.99,conf.int = TRUE)
 Both Welch’s t-test (p = 0.0558) and the Mann–Whitney test (p = 0.7813) consistently indicate that the evidence is not strong enough to reject the null hypothesis at the 95% confidence level.
 
 Therefore, there is no statistically significant difference in blood mercury levels between men and women.
+
+
+
 
 6.BMI and HDL
 
@@ -499,18 +616,6 @@ However, the explanatory power of the model was limited: only 7.7% variation (R�
 Since this was a simple (single-variable) regression, the adjusted R² was nearly identical to the unadjusted R² and therefore not further discussed.
 
 
-**Answer to 6a (continued) :**
-
-
-```{r}
-
-sum(is.na(data$hdl))
-sum(is.na(data$bmi))
-sum(!complete.cases(data[, c("hdl","bmi")]))
-
-t.test (age 
-```
-
 b\. Does the relationship between HDL and BMI change when you adjust for age (categorized)? Interpret the coefficients of the resulting model (when you mean-center BMI before fitting the model, you can also interpret the intercept). Would you say that BMI has a clinically relevant impact on HDL, according to your model?
 
 
@@ -524,13 +629,62 @@ summary(model_controlled)
 
 After adding age as a control variable, R-squared improved from 0.07721 to 0.08615, and the adjusted R-squared showed a similar patter (from 0.077 to 0.0857), indicating a modest but genuine improvement in explanatory power. BMI remained a statistically negative predictor of HDL, and its coefficient become marginally stronger, suggesting that controlling for age reduced confounding and revealed a more robust independent association between BMI and HDL.
 
-**Answer to 6b (continued):**
+
+
+**Answer to 6a and 6b (continued) :**
+
+In the current analysis, 634 observations were excluded due to missing data. 
+
+Both BMI and HDL had a considerable amount of missingness (574 and 290 cases, corresponding to 11.5% and 5.8%, respectively), whereas age was complete.
+
+Correlation analyses revealed that missingness in both HDL and BMI was significantly associated with age.Specifically, the mean age was 50.0 years in the HDL-missing group versus 47.2 years in the non-missing group (t = -3.18, p = 0.0015), and 52.6 years versus 47.2 years for BMI (t = -4.32, p < 0.001). These findings suggest that the missingness mechanism was not completely at random (approximately MAR).
+
+However, given that the overall proportion of missing data was moderate (below 15%), multiple imputation was not applied.
+
+As older individuals generally have higher BMI and lower HDL levels, this missingness pattern likely resulted in a slightly younger and healthier analytic sample.
+
+Consequently, the observed negative association between BMI and HDL may be somewhat attenuated, indicating that the true inverse relationship in the overall population is likely stronger than what was estimated here.
+
 ```{r}
+
+# 查看缺失数量
+sum(is.na(data$hdl))
+sum(is.na(data$bmi))
+sum(is.na(data$age))
+sum(!complete.cases(data[, c("hdl", "bmi", "age")]))
+
+
+hdl_missing_n <- sum(is.na(data$hdl))
+bmi_missing_n <- sum(is.na(data$bmi))
+age_missing_n <- sum(is.na(data$age))
+
+hdl_missing_p <- round(mean(is.na(data$hdl)) * 100, 1)
+bmi_missing_p <- round(mean(is.na(data$bmi)) * 100, 1)
+age_missing_p <- round(mean(is.na(data$age)) * 100, 1)
+
+data.frame(
+  Variable = c("hdl", "bmi", "age"),
+  Missing_N = c(hdl_missing_n, bmi_missing_n, age_missing_n),
+  Missing_Percent = c(hdl_missing_p, bmi_missing_p, age_missing_p)
+)
+
+data$missing_hdl <- ifelse(is.na(data$hdl), 1, 0)
+data$missing_bmi <- ifelse(is.na(data$bmi), 1, 0)
+
+
+t.test(age ~ missing_hdl, data = data)
+t.test(age ~ missing_bmi, data = data)
 
 ```
 
 
+
+
 c\. Try to find a better model to predict HDL by including more covariates. Select a number of candidate covariates which in your opinion may be related to HDL, and then choose a model selection strategy and a criterion/test for comparing models. Describe the model with the best fit according to your search, and interpret the model coefficients.
+
+
+
+
 
 7.Cancer
 

@@ -594,8 +594,6 @@ Both Welch’s t-test (p = 0.0558) and the Mann–Whitney test (p = 0.7813) cons
 Therefore, there is no statistically significant difference in blood mercury levels between men and women.
 
 
-
-
 6.BMI and HDL
 
 a\. How strong is the relationship between BMI and HDL (the "good" cholesterol)? Is it significant? How much of the variation in HDL can be explained (in a statistical sense) by variation in BMI?
@@ -630,21 +628,6 @@ summary(model_controlled)
 After adding age as a control variable, R-squared improved from 0.07721 to 0.08615, and the adjusted R-squared showed a similar patter (from 0.077 to 0.0857), indicating a modest but genuine improvement in explanatory power. BMI remained a statistically negative predictor of HDL, and its coefficient become marginally stronger, suggesting that controlling for age reduced confounding and revealed a more robust independent association between BMI and HDL.
 
 
-
-**Answer to 6a and 6b (continued) :**
-
-In the current analysis, 634 observations were excluded due to missing data. 
-
-Both BMI and HDL had a considerable amount of missingness (574 and 290 cases, corresponding to 11.5% and 5.8%, respectively), whereas age was complete.
-
-Correlation analyses revealed that missingness in both HDL and BMI was significantly associated with age.Specifically, the mean age was 50.0 years in the HDL-missing group versus 47.2 years in the non-missing group (t = -3.18, p = 0.0015), and 52.6 years versus 47.2 years for BMI (t = -4.32, p < 0.001). These findings suggest that the missingness mechanism was not completely at random (approximately MAR).
-
-However, given that the overall proportion of missing data was moderate (below 15%), multiple imputation was not applied.
-
-As older individuals generally have higher BMI and lower HDL levels, this missingness pattern likely resulted in a slightly younger and healthier analytic sample.
-
-Consequently, the observed negative association between BMI and HDL may be somewhat attenuated, indicating that the true inverse relationship in the overall population is likely stronger than what was estimated here.
-
 ```{r}
 
 # 查看缺失数量
@@ -676,7 +659,19 @@ t.test(age ~ missing_hdl, data = data)
 t.test(age ~ missing_bmi, data = data)
 
 ```
+**Answer to 6a and 6b (continued) :**
 
+In the current analysis, 634 observations were excluded due to missing data. 
+
+Both BMI and HDL had a considerable amount of missingness (574 and 290 cases, corresponding to 11.5% and 5.8%, respectively), whereas age was complete.
+
+Correlation analyses revealed that missingness in both HDL and BMI was significantly associated with age.Specifically, the mean age was 50.0 years in the HDL-missing group versus 47.2 years in the non-missing group (t = -3.18, p = 0.0015), and 52.6 years versus 47.2 years for BMI (t = -4.32, p < 0.001). These findings suggest that the missingness mechanism was not completely at random (approximately MAR).
+
+However, given that the overall proportion of missing data was moderate (below 15%), multiple imputation was not applied.
+
+As older individuals generally have higher BMI and lower HDL levels, this missingness pattern likely resulted in a slightly younger and healthier analytic sample.
+
+Consequently, the observed negative association between BMI and HDL may be somewhat attenuated, indicating that the true inverse relationship in the overall population is likely stronger than what was estimated here.
 
 
 

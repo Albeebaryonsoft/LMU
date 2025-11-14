@@ -155,7 +155,6 @@ dat <- Orange
 tree_colors <- as.numeric(Orange$Tree)
 
 
-
 palette_colors <- rainbow(length(unique(Orange$Tree)))
 palette_colors
 
@@ -174,6 +173,11 @@ class("circumference")
 class("age")
 ggplot(Orange, aes(age, circumference, color = Tree)) + geom_point()
 ggplot(Orange, aes(age, circumference, color = Tree)) + geom_line()
+
+
+
+
+
 
 
 

@@ -77,6 +77,7 @@ F_upper <- F_stat / qf(alpha/2, df1, df2)
 CI <- c(F_lower, F_upper)
 CI
 
+
 # problem 3
 # paired t 参数可调整版
 

@@ -171,25 +171,57 @@ t_stat; p_value; CI
 
 # ---- 单一比例 的 CI（近似/Wilson）与精确（Clopper-Pearson）
 # 例：n=100 中成功 x=32
-x_success <- 32; n_total <- 100
+x_success <- 471; n_total <- 1000
 
 # 近似（prop.test 使用 Wilson/正态近似，带连续性修正）
-ci_prop_approx <- prop.test(x_success, n_total,conf.level = 0.99, correct = TRUE)
+ci_prop_approx <- prop.test(x_success, n_total,conf.level = 0.95, correct = TRUE)
 ci_prop_approx
 
 # 精确区间（binom.test 使用 Clopper-Pearson）
-ci_prop_exact <- binom.test(x_success, n_total, p = 0.3, conf.level = 0.99, alternative = "two.sided")
+ci_prop_exact <- binom.test(x_success, n_total, p = 0.5, conf.level = 0.95, alternative = "two.sided")
 ci_prop_exact  # 检验总体p是不是0.2， 在p=0.3的情况下，观察到这个结果的概率
 
 #输出结果已经包含CI
 
 
 
-# ---- 双比例 比较的 CI/检验（例：两组转归率比较）
-x1 <- 18; n1 <- 80
-x2 <- 30; n2 <- 90
-prop_2sample <- prop.test(c(x1, x2), c(n1, n2), conf.level = 0.99, correct = TRUE) # 比例差检验+CI
+# ---- 双比例 1. test for equality of proportions
+x1 <- 65; n1 <- 94
+x2 <- 63; n2 <- 74
+prop_2sample <- prop.test(c(x1, x2), c(n1, n2), conf.level = 0.95, correct = TRUE) # 比例差检验+CI
 prop_2sample
+
+prop.test(c(x1, x2), c(n1, n2), alternative = "less",  conf.level = 0.95,correct = TRUE) # H0: P1 >= P2 , H1: P1 < P2
+prop.test(c(x1, x2), c(n1, n2), alternative = "greater",  conf.level = 0.95,correct = TRUE) # H0: P1 <= P2 , H1: P1 > P2
+
+# ---- 双比例 2. test for independence (vs. association) in the 2*2 table : chi or fisher
+# display 2*2 table
+tab <- matrix(c(65, 29,  # n of success, n of failure
+                63, 11),
+              nrow = 2, byrow = TRUE)
+colnames(tab) <- c("Success", "Failure")
+rownames(tab) <- c("Group1", "Group2")
+tab
+
+# chi
+chisq.test(tab, correct = FALSE)   # without Yates correction
+chisq.test(tab)                    # with Yates correction (default for 2x2)
+
+# fisher test :for small samples or exact p-value)
+fisher.test(tab)
+
+# ---- 双比例 配对 McNemar 配对比例 --------
+
+
+
+
+
+
+
+
+
+
+
 
 
 ## ===============================
@@ -231,6 +263,8 @@ p_value <- 2 * min(
 F_lower <- F_stat / qf(1 - alpha/2, df1, df2)
 F_upper <- F_stat / qf(alpha/2, df1, df2)
 CI <- c(F_lower, F_upper)
+
+
 
 
 ## ===============================

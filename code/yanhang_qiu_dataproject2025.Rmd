@@ -32,13 +32,18 @@ data <- read.csv2("../data/NHANES1.csv",row.names = 1)
 data_raw <- data
 
 categories <- list(
-  demographic_data = c("seqn","age","educ","martlst","male","ethnic","increl","age.cat","age_bin"),
-  examination_data  = c("weight","height","bmi","rr_sys","rr_dia","bmi_cat"),
-  dietary_data = c("rdyfood_prvmo","frzfood_prvmo","milk_month"),
-  laboratory_data = c("cd","pb","hg","hdl","logHdl","hivpos")
+  demographic = c("seqn","age","educ","martlst","male","ethnic","increl","age.cat","age_bin"),
+  examination  = c("weight","height","bmi","rr_sys","rr_dia","bmi_cat","hdl","logHdl"),
+  dietary = c("rdyfood_prvmo","frzfood_prvmo","milk_month"),
+  lifestyle =c("alc_lft", "drnkprd_prv12mo", "cigsprd_prv30d", "sleep_dur", "sleep_probl", "hrsworked_prvwk", "wrkt_irreg", "workpollut","smokstat","smoke_bin","cannab_ever","harddrg_ever","jobstat_lwk"),
+  disease =c("heartdis_ever","diab_lft", "livdis_ever", "arthrit_ever", "stroke_ever", "cancer_ever", "cbronch_now", "lungpath_ever","asthma_ever","asthma_now","ovrwght_ever","livdis_now","hivpos"),
+  fam_history =c("rel_heartdis", "rel_diab", "rel_asthma"),
+  selfrated_health = c("srhgnrl", "srphbad_prv30d", "srmhbad_prv30d", "adlimp_prv30d"),
+  depression =c ("phq1", "phq2", "phq3", "phq4", "phq5", "phq6", "phq7", "phq8","phq9"),
+  envir_and_toxic = c("cd", "pb", "hg")
 )
 
-categories$questionnaire_data <- setdiff(names(data), unlist(categories))
+categories$uncategorised_var <- setdiff(names(data), unlist(categories))
 cat_df <- stack(categories)
 names(cat_df) <- c("variable", "category")
 
@@ -51,8 +56,10 @@ summary_table <- data.frame(
 
 summary_table <- merge(summary_table, cat_df, by = "variable", all.x = TRUE)
 
-summary_table [1:5,]
 
+summary_table %>%
+  filter(category == "uncategorised_var") %>%
+  select(variable, variable)
 
 ```
 
@@ -625,7 +632,8 @@ summary(model_controlled)
 ```
 **Answer to 6b :**
 
-After adding age as a control variable, R-squared improved from 0.07721 to 0.08615, and the adjusted R-squared showed a similar patter (from 0.077 to 0.0857), indicating a modest but genuine improvement in explanatory power. BMI remained a statistically negative predictor of HDL, and its coefficient become marginally stronger, suggesting that controlling for age reduced confounding and revealed a more robust independent association between BMI and HDL.
+After adding age as a control variable, R-squared improved from 0.07721 to 0.08615, and the adjusted R-squared showed a similar patter (from 0.077 to 0.0857), indicating a modest but genuine improvement in explanatory power. 
+BMI remained a statistically negative predictor of HDL (β = –0.016, p \< < 2e-16), and its coefficient become marginally stronger, suggesting that controlling for age reduced confounding and revealed a more robust independent association between BMI and HDL.
 
 
 ```{r}
@@ -659,6 +667,7 @@ t.test(age ~ missing_hdl, data = data)
 t.test(age ~ missing_bmi, data = data)
 
 ```
+
 **Answer to 6a and 6b (continued) :**
 
 In the current analysis, 634 observations were excluded due to missing data. 
@@ -674,11 +683,107 @@ As older individuals generally have higher BMI and lower HDL levels, this missin
 Consequently, the observed negative association between BMI and HDL may be somewhat attenuated, indicating that the true inverse relationship in the overall population is likely stronger than what was estimated here.
 
 
-
 c\. Try to find a better model to predict HDL by including more covariates. Select a number of candidate covariates which in your opinion may be related to HDL, and then choose a model selection strategy and a criterion/test for comparing models. Describe the model with the best fit according to your search, and interpret the model coefficients.
 
 
+```{r}
 
+unique(summary_table[, c("variable", "category")])
+
+library(dplyr)
+library(purrr)
+
+# -------- 1️⃣ 配置优先变量策略 --------
+USE_SBP <- TRUE      # 保留 rr_sys 而去掉 rr_dia
+USE_CIGS_CONT <- TRUE # 保留 cigsprd_prv30d（连续），删除 smokstat
+
+# -------- 2️⃣ 派生 PHQ 总分 --------
+phq_items <- paste0("phq", 1:9)
+if (all(phq_items %in% names(data))) {
+  data <- data %>%
+    mutate(phq_total = rowSums(across(all_of(phq_items)), na.rm = TRUE))
+}
+
+# -------- 3️⃣ 统一排除清单 --------
+drop_vars <- c(
+  # ID / 派生
+  "seqn", "age.cat", "age_bin", "bmi_cat",
+  # 因变量
+  "hdl", "logHdl",
+  # 重复二选一（稍后根据配置再补）
+  # 粗糙或短期指标
+  "srphbad_prv30d", "srmhbad_prv30d", "adlimp_prv30d", "jobstat_lwk",
+  # 疾病类冗余
+  "asthma_now", "livdis_now", "ovrwght_ever", "hivpos",
+  # 量表条目
+  phq_items,
+  # 环境暴露（扩展分析时再加）
+  "cd", "pb", "hg",
+  # 其他次要项
+  "rel_asthma", "alc_lft", "smoke_bin"
+)
+
+# 根据配置确定去掉哪一方
+if (USE_SBP) {
+  drop_vars <- c(drop_vars, "rr_dia")  # 留 rr_sys
+} else {
+  drop_vars <- c(drop_vars, "rr_sys")
+}
+
+if (USE_CIGS_CONT) {
+  drop_vars <- c(drop_vars, "smokstat")  # 留 cigsprd_prv30d
+} else {
+  drop_vars <- c(drop_vars, "cigsprd_prv30d")
+}
+
+# -------- 4️⃣ 在 summary_table 打标记 --------
+summary_table <- summary_table %>%
+  mutate(keep_final = if_else(variable %in% drop_vars, FALSE, TRUE))
+
+# -------- 5️⃣ 提取保留变量并生成模型变量集 --------
+model_vars <- summary_table %>%
+  filter(keep_final) %>%
+  group_split(category) %>%
+  set_names(map_chr(summary_table %>% filter(keep_final) %>% group_keys(), "category")) %>%
+  map(~ .x$variable)
+
+# -------- 6️⃣ 展开所有可建模变量 --------
+vars_model <- unique(unlist(model_vars))
+
+# -------- 7️⃣ 创建建模用数据集 --------
+data_model <- data %>%
+  select(all_of(vars_model), hdl, logHdl, phq_total) %>%   # 保留 HDL 作为目标
+  relocate(hdl, .before = 1)
+
+# -------- 8️⃣ 输出汇总信息 --------
+cat("✅ 可用于建模的变量数量：", length(vars_model), "\n")
+cat("✅ 包含的类别：", paste(names(model_vars), collapse = ", "), "\n\n")
+
+# 每类展示前几个变量
+for (cat_name in names(model_vars)) {
+  cat("###", cat_name, "\n")
+  cat(paste(model_vars[[cat_name]], collapse = ", "), "\n\n")
+}
+
+# -------- 9️⃣ 缺失率快速检查（方便后续筛除高缺失变量） --------
+missing_summary <- tibble(variable = vars_model) %>%
+  mutate(
+    missing_rate = map_dbl(variable, ~ mean(is.na(data[[.x]])) * 100),
+    class = map_chr(variable, ~ class(data[[.x]])[1])
+  ) %>%
+  arrange(desc(missing_rate))
+
+cat("=== 缺失率前10变量 ===\n")
+print(head(missing_summary, 10))
+
+
+
+
+```
+
+age, educ, ethnic, increl, martlst, male, martlst
+bmi, height, rr_dia, weight
+frzfood_prvmo，milk_month，rdyfood_prvmo
 
 
 7.Cancer

@@ -97,15 +97,16 @@ ss_prop_one <- function(p1, p0, alpha = 0.05, power = 0.80,
                  power       = power,
                  alternative = alternative,
                  n           = n),
-            class = "htest")
+            class = "power.htest")
 }
 
 ## 示例：
 ss_prop_one(p1 = 0.15, p0 = 0.05)
 
 
+
 ## ----------------------------------------------------
-## ⑤ 双样本比例检验（Two-sample proportion z-test）
+## ⑤ 双样本比例检验（Two-sample proportion z-test，比老师给的z计算要更加好计算，手算的时候用）
 ## ----------------------------------------------------
 ## 目的：比较两个独立组比例 p1 vs p2
 
@@ -129,7 +130,7 @@ ss_prop_two <- function(p1, p2, alpha = 0.05, power = 0.80,
                  power       = power,
                  alternative = alternative,
                  n_per_group = n),
-            class = "htest")
+            class = "power.htest")
 }
 
 ## 示例：
@@ -162,11 +163,11 @@ ss_prop_mcnemar <- function(p10, p01, alpha = 0.05, power = 0.80,
                  power       = power,
                  alternative = alternative,
                  n_pairs     = n),
-            class = "htest")
+            class = "power.htest")
 }
 
 ## 示例：
-## ss_prop_mcnemar(p10 = 0.15, p01 = 0.05)
+ss_prop_mcnemar(p10 = 0.15, p01 = 0.05)
 
 ## =========================================================
 ## 使用方法：

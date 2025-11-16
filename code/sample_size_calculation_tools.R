@@ -48,9 +48,11 @@ ss_t_two <- function(d, alpha = 0.05, power = 0.80,
 ## 示例：
 ## 双侧：
 ss_t_two(d = 0.4, alpha = 0.05, power = 0.80)
+## 双侧：
+ss_t_two(d = 0.25, alpha = 0.05, power = 0.80)
+
 ## 单侧：
 ss_t_two(d = 0.5, alpha = 0.05, power = 0.80, alternative = "greater")
-
 
 ## -------------------------------------
 ## ③ 配对 t 检验（Paired t-test）

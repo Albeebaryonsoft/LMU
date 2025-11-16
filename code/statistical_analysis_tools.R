@@ -9,6 +9,7 @@ set.seed(123)
 x_norm <- seq(-3, 3, length.out = 7)
 dnorm_vals <- dnorm(x_norm, mean = 0, sd = 1)   # density f(x)
 pnorm_vals <- pnorm(x_norm, mean = 0, sd = 1)   # accumulative F(x)
+pnorm_vals <- pnorm(-4.9, mean = 0, sd = 1)   # accumulative F(x)
 qnorm_vals <- qnorm(c(0.025, 0.5, 0.975), mean = 0, sd = 1)  # 反向
 qnorm_vals <- qnorm(0.025, mean = 0, sd = 1)  # 反向
 rnorm_samp <- rnorm(5, mean = 0, sd = 1)        # random sample
@@ -196,16 +197,18 @@ prop.test(c(x1, x2), c(n1, n2), alternative = "greater",  conf.level = 0.95,corr
 
 # ---- 双比例 2. test for independence (vs. association) in the 2*2 table : chi or fisher
 # display 2*2 table
-tab <- matrix(c(65, 29,  # n of success, n of failure
-                63, 11),
+tab <- matrix(c(352, 100,  # n of success, n of failure
+                548, 300),
               nrow = 2, byrow = TRUE)
 colnames(tab) <- c("Success", "Failure")
 rownames(tab) <- c("Group1", "Group2")
 tab
 
 # chi
-chisq.test(tab, correct = FALSE)   # without Yates correction
-chisq.test(tab)                    # with Yates correction (default for 2x2)
+result_1 <- chisq.test(tab, correct = FALSE)   # without Yates correction
+result_2 <- chisq.test(tab)                    # with Yates correction (default for 2x2)
+
+result_1; result_2
 
 # fisher test :for small samples or exact p-value)
 fisher.test(tab)

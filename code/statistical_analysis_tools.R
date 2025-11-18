@@ -213,18 +213,6 @@ result_1; result_2
 # fisher test :for small samples or exact p-value)
 fisher.test(tab)
 
-# ---- 双比例 配对 McNemar 配对比例 --------
-
-
-
-
-
-
-
-
-
-
-
 
 
 ## ===============================
@@ -315,5 +303,95 @@ c(mu_hat_opt = mu_hat_opt, sigma_hat_opt = sigma_hat_opt)
 x <- 37; n <- 120
 p_hat <- x / n
 p_hat
+
+
+## ===============================
+## 6) Mantel–Haenszel (OR): analysis confounding and test if the association is still significant after adjustment
+## ===============================
+
+a1 <- 216; b1 <- 80;  c1 <- 144; d1 <- 120   # Stratum 1
+a2 <- 8;   b2 <- 20;  c2 <- 32;  d2 <- 180   # Stratum 2
+# a3 <- 再加一层也可以
+tab_crude <- matrix(c(a1+a2, b1+b2,
+                      c1+c2, d1+d2),
+                    nrow = 2, byrow = TRUE)
+tab_crude
+
+a <- tab_crude[1,1]
+b <- tab_crude[1,2]
+c <- tab_crude[2,1]
+d <- tab_crude[2,2]
+
+crude_or <- (a*d)/(b*c)
+
+tab_strata <- array(
+  c(a1,b1,c1,d1,
+    a2,b2,c2,d2),
+  dim = c(2,2,2),
+  dimnames = list(
+    Exposure = c("E+","E-"),
+    Disease  = c("D+","D-"),
+    Strata   = c("S1","S2") #"S3"
+  )
+)
+tab_strata
+# tab_strata <- array(c(a1,b1,c1,d1,a2,b2,c2,d2,a3,b3,c3,d3),dim = c(2,2,3))
+
+
+mh <- mantelhaen.test(tab_strata)
+mh_or <- as.numeric(mh$estimate)
+
+## -------- 3. 看是否混杂（>10% 变化）--------
+pct_change <- (mh_or - crude_or)/crude_or * 100
+
+list(
+  crude_OR = crude_or,
+  MH_adjusted_OR = mh_or,
+  percent_change = pct_change,
+  confounding = ifelse(abs(pct_change) > 10,
+                       "Yes (evidence of confounding)",
+                       "No (little evidence of confounding)")
+  
+)
+
+mh
+
+## ===============================
+## 7) Mantel–Haenszel (RR): analysis confounding and test if the association is still significant after adjustment
+## ===============================
+
+
+a1 <- 52; b1 <- 135; c1 <- 53; d1 <- 235
+a2 <- 88; b2 <- 85;  c2 <- 24; d2 <- 48
+
+A <- a1 + a2
+B <- b1 + b2
+C <- c1 + c2
+D <- d1 + d2
+
+crude_rr <- (A / (A + B)) / (C / (C + D))
+
+## 2) MH-adjusted RR（Rothman 公式）
+N1 <- a1 + b1 + c1 + d1
+N2 <- a2 + b2 + c2 + d2
+
+num <- a1 * (c1 + d1) / N1 + a2 * (c2 + d2) / N2
+den <- c1 * (a1 + b1) / N1 + c2 * (a2 + b2) / N2
+
+mh_rr <- num / den
+
+pct_change <- (mh_rr - crude_rr) / crude_rr * 100
+
+confounding <- ifelse(abs(pct_change) >= 10,
+                      "Yes, confounding present (≥10% change)",
+                      "No, little confounding (<10% change)")
+
+list(
+  crude_RR = crude_rr,
+  MH_RR = mh_rr,
+  percent_change = pct_change,
+  confounding = confounding
+)
+
 
 

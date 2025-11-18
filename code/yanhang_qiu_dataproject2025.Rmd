@@ -477,7 +477,9 @@ hist(data$hg, col = 2, breaks = 80)
 
 **Answer to 5a:**
 
-Through descriptive analysis, we observed that blood mercury levels among participants varied widely, ranging from approximately 0.5 to more than 200 µg/L. The distribution of blood mercury levels was skewed toward the lower range, with 75% of men below 9.8 µg/L and 75% of women below 9.1 µg/L, suggesting that most participants had comparatively low exposure. However, a considerable number of individuals were still exposed to elevated blood mercury levels, posing potential health risks that warrant further investigation. In this case, we categorized the blood mercury variable into clinically meaningful risk groups based on internationally recognized guidelines from WHO, CDC, ATSDR, and EPA. This categorization provides a clearer interpretation of exposure severity and allows for more informative and interpretable visualizations.
+Through descriptive analysis, we observed that blood mercury levels among participants varied widely, ranging from approximately 0.5 to more than 200 µg/L. The distribution of blood mercury levels was skewed toward the lower range, with 75% of men below 9.8 µg/L and 75% of women below 9.1 µg/L, suggesting that most participants had comparatively low exposure. 
+
+However, a considerable number of individuals were still exposed to elevated blood mercury levels, posing potential health risks that warrant further investigation. In this case, we categorized the blood mercury variable into clinically meaningful risk groups based on internationally recognized guidelines from WHO, CDC, ATSDR, and EPA. This categorization provides a clearer interpretation of exposure severity and allows for more informative and interpretable visualizations.
 
 ```{r 5a message=FALSE, warning=FALSE}
 library(dplyr)

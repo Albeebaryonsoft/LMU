@@ -1,3 +1,5 @@
+
+
 ## ===============================
 ## 1) 常见分布：正态、二项、Poisson、t 分布
 ## ===============================
@@ -254,7 +256,6 @@ p_value <- 2 * min(
 F_lower <- F_stat / qf(1 - alpha/2, df1, df2)
 F_upper <- F_stat / qf(alpha/2, df1, df2)
 CI <- c(F_lower, F_upper)
-
 
 
 

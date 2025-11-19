@@ -181,6 +181,110 @@ ss_prop_mcnemar(p10 = 0.15, p01 = 0.05)
 
 # 老师没有讲配对样本t的样本量计算方法，是因为需要知道组内相关性 ρ（课堂无法提供）
 
+###################################################
+### alpha and beta, and sample size calculation ###
+###################################################
 
+install.packages("ggplot2")
+library(ggplot2)
+
+## 1) Bonferroni Correction: given alpha and sample size, calculate beta and draw distribution
+d <- 0.5
+n <- 64 # assume the sample size is 64
+
+SE <- sqrt(2/n)
+NCP <- d / SE
+k = 3 # k is number of multiple testing
+
+alpha1  <- 0.05/k  # Bonferroni Correction
+crit  <- qnorm(1 - alpha1/2)      
+
+## x range
+x <- seq(-4, 6, length.out = 2000)
+
+## distributions
+df <- data.frame(
+  x = x,
+  H0 = dnorm(x, mean = 0, sd = 1),
+  H1 = dnorm(x, mean = NCP, sd = 1)
+)
+
+## Regions for shading
+# Type I error region (alpha): H0 in rejection region
+shade_alpha_right <- subset(df, x >= crit)
+shade_alpha_left  <- subset(df, x <= -crit)
+
+# Power region (1 - beta): H1 in rejection region
+shade_power_right <- subset(df, x >= crit)
+shade_power_left  <- subset(df, x <= -crit)
+
+# Type II error region (beta): H1 in acceptance region
+shade_beta <- subset(df, x > -crit & x < crit)
+
+## Calculate alpha, beta, power
+alpha <- (1 - pnorm(crit)) + pnorm(-crit)
+beta  <- pnorm(crit, mean=NCP, sd=1) - pnorm(-crit, mean=NCP, sd=1)
+power <- 1 - beta
+
+alpha; beta; power
+
+## ---------- Plot ----------
+ggplot() +
+  # H0
+  geom_line(data=df, aes(x=x, y=H0), linewidth=1) +
+  # H1
+  geom_line(data=df, aes(x=x, y=H1), linewidth=1, color="red") +
+  
+  # Alpha (Type I): blue shading
+  geom_area(data=shade_alpha_right, aes(x=x, y=H0),
+            fill="blue", alpha=0.3) +
+  geom_area(data=shade_alpha_left, aes(x=x, y=H0),
+            fill="blue", alpha=0.3) +
+  
+  # Power (1 - beta): H1 in rejection region (red shading)
+  geom_area(data=shade_power_right, aes(x=x, y=H1),
+            fill="red", alpha=0.3) +
+
+  # Beta: green shading
+  geom_area(data=shade_beta, aes(x=x, y=H1),
+            fill="green", alpha=0.3) +
+  
+  # Critical lines
+  geom_vline(xintercept=c(-crit, crit), color="blue", linetype="dashed") +
+  
+  labs(
+    x="Z",
+    y="Density",
+    title=paste0("H0: N(0,1) vs H1: N(", round(NCP,2), ",1)"),
+    subtitle=paste0(
+      "Alpha = ", round(alpha,3),
+      "   |   Beta = ", round(beta,3),
+      "   |   Power = ", round(power,3)
+    )
+  ) +
+  theme_minimal(base_size = 14)
+
+# 2）Bonferroni Correction: given cohen's d, corrected alpha, expected beta, calculate sample size
+
+alpha_exp <- 0.05   # experiment-wide alpha
+k         <- 1     # number of tests
+alpha_i   <- alpha_exp / k   # Bonferroni 校正后的 per-test alpha
+
+power     <- 0.80
+beta      <- 1 - power
+
+d         <- 0.5    # Cohen's d (真实效应大小，以 SD 为单位)
+
+## 对应的 z 值
+z_alpha <- qnorm(1 - alpha_i/2)  # z_{1 - α_i/2} for two-sided test
+z_beta  <- qnorm(power)          # z_{1 - β}，因为 power = 1 - β
+
+z_alpha
+z_beta
+
+## Z 近似公式计算每组样本量
+n_per_group <- 2 * (z_alpha + z_beta)^2 / d^2
+n_per_group
+ceiling(n_per_group)  # 向上取整作为最终每组样本量
 
 

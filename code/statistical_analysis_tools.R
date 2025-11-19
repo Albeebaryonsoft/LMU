@@ -395,11 +395,11 @@ list(
 
 
 ## ===============================
-## 8) Wilcoxon signed rank test
+## 8) sign test
 ## ===============================
 
 # 基本上就是二项分布
-binom.test (x=2, n=11, p=0.5, conf.level =  0.95)
+binom.test (x=2, n=11, p=0.5, conf.level =  0.95)  # P = 0.065 
 
 
 ## ===============================
@@ -408,11 +408,15 @@ binom.test (x=2, n=11, p=0.5, conf.level =  0.95)
 
 x <- c(5260, 5470, 5640, 6180, 6390, 6515, 6805, 7515, 7515, 8230, 8770) # duplicated values, rank +0.5
 
-wilcox.test(x, mu = 7725, exact = FALSE, correct = TRUE)
+wilcox.test(x, mu = 7725, exact = FALSE, correct = TRUE) # P = 0.0293 , 有参数后面的参数，因为有重复值
 
+# compare with student t  p = 0.01814
+t.test(x, mu = 7725) 
+
+# t-test 在满足其假设（特别是接近正态、无明显离群值）的情况下，利用最多的信息 → 统计效率最高 → 在同样样本量下最易检出差异 → power 最大。
 
 ## ===============================
-## 10) Wilcoxon （ Mann- Whitney T test in R) - non-para test for two independent samples
+## 10) Wilcoxon （ Mann- Whitney U, test statistic T ) - non-para test for two independent samples
 ## ===============================
 
 data("airquality")
@@ -433,6 +437,32 @@ wilcox.test(x, y, alternative = "two.sided", paired = FALSE, correct = FALSE)
 ## 11) Wilcoxon （ Mann- Whitney U test in R) - non-para test for two independent samples
 ## ===============================
 
+group1 <- c(6130,7050,7480,7480,7530,7580,7900,8080,8090,8110,8400,10150,10880)
+group2 <- c(8390,9190,9210,9680,9690,9970,11510,11850,12790)
 
+wilcox.test(group1,group2, alternative = "two.sided", paired = FALSE, correct = FALSE)
+# p=0.002372 < 0.05 , there is difference in average ranks in the two populations. 
+# W = 13, is the number of scores in group with smaller sum of rank. 
+# wilcox.test 近似正态分布， 使用了 continuity correction， 矫正过后p更大，更保守
+
+# use coin package to run non-parameter test, have to follow the gramma
+install.packages("coin")
+
+x <- group1
+y <- group2
+g <- factor(c(rep("A", length(x)), rep("B", length(y))))
+v <- c(x, y)
+
+library(coin)
+wilcox_test(v ~ g, distribution = "exact") 
+# coin 使用 exact distribution 精确分布
+# coin 计算真实的exact p-value, 能正确处理ties重复值，所以p更小，更精确
+
+
+
+# 检验临界值25和88之外的面积是否为0.05
+qwilcox(0.025, 9, 13, lower.tail = TRUE, log.p =  FALSE)  
+qwilcox(0.025, 9, 13, lower.tail = FALSE, log.p =  FALSE)
+pwilcox(29,13,9,lower.tail = TRUE, log.p = FALSE) + pwilcox(88,13,9,lower.tail = FALSE, log.p = FALSE)
 
 

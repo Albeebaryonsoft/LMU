@@ -24,13 +24,14 @@ b\. What general categories (such as "demographics", "lab results") can the vari
 
 **Answer to 1b:**
 
-The variables in the dataset can be categorized into five main groups: demographic data, examination data, laboratory data, dietary data, and questionnaire data.
+The variables in the dataset can be categorized into groups such as demographic data, examination data,  dietary data, lifestyles, disease, family history, selfrated_health, depression, environment and toxic,
 
 ```{r 1b, message=FALSE, warning=FALSE}
 
 data <- read.csv2("../data/NHANES1.csv",row.names = 1)
 data_raw <- data
 
+library(dplyr)
 categories <- list(
   demographic = c("seqn","age","educ","martlst","male","ethnic","increl","age.cat","age_bin"),
   examination  = c("weight","height","bmi","rr_sys","rr_dia","bmi_cat","hdl","logHdl"),
@@ -61,7 +62,10 @@ summary_table %>%
   filter(category == "uncategorised_var") %>%
   select(variable, variable)
 
+summary_table
 ```
+
+
 
 2\. Using the subsample you have chosen, describe the US population with regards to:
 
@@ -105,6 +109,8 @@ library(patchwork)
 
 The age distribution in the sample shows limited representativeness of the U.S. population, displaying an approximately uniform count across all age intervals. Despite the complex four-stage sampling design, potential biases may still arise — for example, due to substantial differences in age composition across districts, or because older participants tend to be less willing to respond compared to younger individuals. By grouping participants into age categories, we can reweight each group so that the overall age distribution in the sample better reflects that of the U.S. population.
 
+
+
 b\. When asked about Marital status, some of the participants refused to answer while some didn't know which category they belonged. Hence they were coded differently. Take that into account and recode the variable martlst.
 
 ```{r 2b, message=FALSE, warning=FALSE}
@@ -122,7 +128,10 @@ table(data$martlst_clean, useNA = "ifany")
 
 **Answer to 2b:**
 
-Before recoding martlst the requency of 77 and 99 are 267 and 1 respectively.After recoding the missing value into NA, there are 268 NAs in total.
+Before recoding martlst the requency of 77 and 99 are 267 and 1 respectively. After recoding the missing value into NA, there are 268 NAs in total.
+
+
+
 
 
 c\. Self-rated health. Looking at the results of your descriptive analysis, what do you have to consider when interpreting the results?
@@ -201,42 +210,77 @@ Chi-square tests were conducted to examine whether missingness in the self-rated
 
 These findings suggest that missingness in the self-rated health variable is systematic rather than random. In particular, participants who are male, older, or have lower family income were more likely to have missing responses. As a result, complete-case analyses may disproportionately exclude individuals with potentially poorer health and socioeconomic disadvantage, leading to an overestimation of overall health status in the analytic sample. Therefore, the missing data mechanism is unlikely to be Missing Completely at Random (MCAR), and appropriate methods such as multiple imputation or inverse probability weighting should be considered to reduce selection bias.
 
+
+
 3.Diabetes and ethnicity
 
 a\. How is the diabetes status distributed in your data set? Summarize the 2 diabetes groups in a single group and recode the variable for diabetes status into two groups: non-diabetes and diabetes. Give an interval estimate for diabetes in your data set.
 
+
 ```{r 3a, message=FALSE, warning=FALSE}
 
 library(dplyr)
+library(broom)
+library(binom)
 
 table(data$diab_lft, useNA = "ifany")
-table(data$diab_lft)
-barplot(table(data$diab_lft))
+barplot(table(data$diab_lft),
+        main = "Original Diabetes Variable (diab_lft)",
+        ylab = "Count", col = "grey80")
+
 
 data <- data %>%
   mutate(
     diabetes_status = case_when(
       diab_lft == 1 ~ "non_diabetes",
-      diab_lft == 2 | diab_lft == 3 ~ "diabetes",
+      diab_lft %in% c(2, 3) ~ "diabetes",
       TRUE ~ NA_character_
     )
   )
 
 table(data$diabetes_status, useNA = "ifany")
-barplot( table(data$diabetes_status))
 
-library(broom)
+
+summary_diabetes <- data %>%
+  filter(!is.na(diabetes_status)) %>% 
+  count(diabetes_status) %>%
+  mutate(
+    percent = round(n / sum(n) * 100, 1)
+  )
+
+summary_diabetes
+
+
+counts <- table(data$diabetes_status)
+perc <- round(counts / sum(counts) * 100, 1)
+
+bp <- barplot(
+  counts,
+  col = "grey80",
+  ylim = c(0, max(counts) * 1.15),
+  main = "Distribution of Diabetes Status",
+  ylab = "Count"
+)
+
+text(
+  x = bp,
+  y = counts,
+  labels = paste0(counts, "\n(", perc, "%)"),
+  pos = 3, cex = 1.0
+)
+
 
 x <- sum(data$diabetes_status == "diabetes", na.rm = TRUE)
 n <- sum(!is.na(data$diabetes_status))
 
-CI_CP<- binom.test(x, n, conf.level = 0.95) # method 1: Clopper-Pearson
+# Clopper–Pearso
+CI_CP <- binom.test(x, n, conf.level = 0.95)
 tidy(CI_CP)
 
-install.packages("binom")
-library(binom)
+# Wilson CI
+CI_Wilson <- binom.confint(x, n, conf.level = 0.95, methods = "wilson")
+CI_Wilson
 
-binom.confint(x,n, conf.level = 0.95, methods = "wilson") # method 2: Wilson
 
 
 
@@ -244,7 +288,7 @@ binom.confint(x,n, conf.level = 0.95, methods = "wilson") # method 2: Wilson
 
 **Answer to 3a :**
 
-The vast majority of participants fall into category 1, indicating that most individuals are non-diabetic. A smaller fraction (category 3) are diabetic, and very few are prediabetic (category 2).
+After recoding diabetes status into two categories (“diabetes” and “non-diabetes”), a total of 4,692 participants had valid information. Among them, 602 individuals (12.8%) were classified as having diabetes, while 4,090 individuals (87.2%) were classified as non-diabetic, indicating that diabetes is relatively uncommon in this study population.
 
 Based on our data, the estimated proportion of individuals with diabetes is about 12.8%. The CI are consistent using two methods : Wilson and Clopper-Pearson methods. The 95% confidence interval ranges approximately from 11.9% to 13.8 in both methods, meaning that if you repeated this sampling many times, 95% of such intervals would contain the true population proportion of diabetes.
 
@@ -252,7 +296,7 @@ However, diabetes status was missing for 308 individuals. Since the analysis exc
 
 
 
-b\. Work with the recoded variable. Use an appropriate statistical test to test the relation between diabetes status and ethnicity. Interpret the results of the test.
+b\. Work with the recoded variable. Use an appropriate statistical test to test the  relation between diabetes status and ethnicity. Interpret the results of the test.
 
 ```{r}
 
@@ -302,8 +346,8 @@ data <- data %>%
     hrsworked_prvwk_clean = na_if(hrsworked_prvwk_clean, 99999)
   )
 
-sum(is.na(data$hrsworked_prvwk_clean))        # 缺失数量
-mean(is.na(data$hrsworked_prvwk_clean)) * 100 # 缺失比例（百分比）
+sum(is.na(data$hrsworked_prvwk_clean))        
+mean(is.na(data$hrsworked_prvwk_clean)) * 100 
 
 
 data$missing_hrs <- ifelse(is.na(data$hrsworked_prvwk_clean), "Missing", "Observed")
@@ -321,7 +365,7 @@ In variable `hrsworked_prvwk` there are 2 77777, 1 99999 and 2474 NA values. Aft
 
 Although the missingness of weekly working hours and self-rated health appeared to be random (χ² = 0.71, p = 0.399), the proportion of missing data for weekly working hours was very high (49.54%).
 
-To minimize potential information loss and improve the robustness of the analyses, multiple imputation was performed.After multiple imputation, the newly created dataset contained no missing values (number of missing values = 0). In the following analyses, both the original (non-imputed) and imputed datasets were retained and analyzed in parallel for comparison.
+To minimize potential information loss and improve the robustness of the analyses, multiple imputation was performed. After multiple imputation, the newly created dataset contained no missing values (number of missing values = 0). In the following analyses, both the original (non-imputed) and imputed datasets were retained and analyzed in parallel for comparison.
 
 ```{r}
 library(mice)
@@ -639,6 +683,7 @@ summary(model_controlled)
 **Answer to 6b :**
 
 After adding age as a control variable, R-squared improved from 0.07721 to 0.08615, and the adjusted R-squared showed a similar patter (from 0.077 to 0.0857), indicating a modest but genuine improvement in explanatory power. 
+
 BMI remained a statistically negative predictor of HDL (β = –0.016, p \< < 2e-16), and its coefficient become marginally stronger, suggesting that controlling for age reduced confounding and revealed a more robust independent association between BMI and HDL.
 
 
@@ -680,11 +725,11 @@ In the current analysis, 634 observations were excluded due to missing data.
 
 Both BMI and HDL had a considerable amount of missingness (574 and 290 cases, corresponding to 11.5% and 5.8%, respectively), whereas age was complete.
 
-Correlation analyses revealed that missingness in both HDL and BMI was significantly associated with age.Specifically, the mean age was 50.0 years in the HDL-missing group versus 47.2 years in the non-missing group (t = -3.18, p = 0.0015), and 52.6 years versus 47.2 years for BMI (t = -4.32, p < 0.001). These findings suggest that the missingness mechanism was not completely at random (approximately MAR).
+Correlation analyses revealed that missingness in both HDL and BMI was significantly associated with age.Specifically, the mean age was 50.0 years in the HDL-missing group versus 47.2 years in the non-missing group (t = -3.18, p = 0.0015), and 52.6 years versus 47.2 years for BMI (t = -4.32, p < 0.001). These findings suggest that the missingness mechanism was not completely at random (approximately MAR) with older participants exhibiting a higher likelihood of missing data. 
 
 However, given that the overall proportion of missing data was moderate (below 15%), multiple imputation was not applied.
 
-As older individuals generally have higher BMI and lower HDL levels, this missingness pattern likely resulted in a slightly younger and healthier analytic sample.
+As older individuals generally have higher BMI and lower HDL levels, this missingness pattern likely resulted in a slightly younger and healthier analytic sample. 
 
 Consequently, the observed negative association between BMI and HDL may be somewhat attenuated, indicating that the true inverse relationship in the overall population is likely stronger than what was estimated here.
 
@@ -694,12 +739,86 @@ c\. Try to find a better model to predict HDL by including more covariates. Sele
 
 ```{r}
 
-unique(summary_table[, c("variable", "category")])
+vars <- c(
+  "age",
+  "male", 
+  "ethnic",
+  "educ",
+  "increl",
+  
+  "bmi",
+  "rr_sys",
+  "hdl",
+  "hg",
+  "cd",
+  
+  "sleep_dur",
+  "drnkprd_prv12mo",
+  "cigsprd_prv30d",
+  
+  "phq2"   # PHQ-9 item 2: depressed/hopeless
+)
+
+data_sub <- data[ , vars]
+
+model <- lm(hdl ~ ., data = data_sub)  
+summary(model)
+
+library(car)
+vif(model)
+
+v <- vif(model)
+
+high_vif <- names(v[v > 5])      # moderate–high collinearity
+very_high_vif <- names(v[v >10]) # critical collinearity
+
+high_vif
+very_high_vif
 
 
+qqnorm(residuals(model))
+qqline(residuals(model), col = "red")
+
+plot(model, which = 1)
+
+library(lmtest)
+bptest(model)
+plot(model, which = 4)   # Cook's distance plot
+cooksd <- cooks.distance(model)
+which(cooksd > 4/length(cooksd))
+library(car)
+crPlots(model)
 
 ```
 
+
+**Answer to 6c:**
+
+Step 1: candidate covariates selection. 
+
+Linear regression model will be applied because HDL is a continues variable. 
+For the linear regression analysis, a set of 13 candidate variables was selected based on previous epidemiological evidence, biological plausibility, and the need to avoid multicollinearity. 
+We included 5 demographic variables (age, sex, race/ethnicity, education level, income-to-poverty ratio), 4 examination measures (BMI, systolic blood pressure, blood mercury, blood cadmium), 3 lifestyle variables (sleep duration on workdays, average drinks per day, average cigarettes per day), and 1 mental health indicator (PHQ-9 Item 2: “Feeling depressed or hopeless”).
+
+Variables known to exhibit strong multicollinearity—such as height and weight (highly correlated with BMI), diastolic blood pressure (correlated with systolic blood pressure), individual PHQ-9 items other than Item 2, and multiple correlated dietary indicators—were excluded to ensure model stability and interpretability. 
+
+This selection strategy provides a balanced set of predictors with strong theoretical justification and low collinearity, suitable for robust linear modeling.
+
+
+Step 2: Linear Regression Model Construction and Multicollinearity Assessment
+
+In the second step, we fitted a multivariable linear regression model using the 15 pre-selected covariates. 
+The purpose of this step was twofold:
+(1) to evaluate the associations between the chosen predictors and HDL cholesterol levels, and
+(2) to assess multicollinearity among the covariates to ensure that the model was statistically stable and suitable for interpretation.
+
+To examine multicollinearity, we computed the Generalized Variance Inflation Factor (GVIF) for each variable, accounting for the fact that some predictors (e.g., ethnicity) were coded as multi-level categorical factors. GVIF^(1/(2·df)) values below 2 are generally considered indicative of negligible collinearity.
+
+All GVIF values in the model were well below 1.2, indicating an absence of problematic multicollinearity. This confirmed that the selected set of predictors was appropriate for inclusion in the same linear model.
+
+The regression model explained approximately 25% of the variation in HDL levels (Adjusted R² = 0.233). Significant predictors included sex, BMI, ethnicity, systolic blood pressure, and cigarette consumption. Other covariates, although not individually significant, were retained because they serve as theoretical confounders supported by previous evidence. Residual diagnostics indicated no major violations of model assumptions.
+
+Because many variables originated from different NHANES modules, the use of listwise deletion resulted in the removal of 4474 observations, leaving 510 complete cases for the final regression model. In the previous tasks, we examined the missing data mechanism and found that missingness in both HDL and BMI was significantly associated with age. This indicates that the data were not Missing Completely At Random (MCAR). Although listwise deletion is acceptable for the purpose of this exercise, the substantial reduction in sample size may introduce bias, and more advanced approaches—such as multiple imputation—would be recommended in applied research settings.
 
 
 

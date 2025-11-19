@@ -1,5 +1,3 @@
-
-
 ## ===============================
 ## 1) 常见分布：正态、二项、Poisson、t 分布
 ## ===============================
@@ -259,6 +257,7 @@ CI <- c(F_lower, F_upper)
 
 
 
+
 ## ===============================
 ## 5) 最大似然估计（MLE）示例
 ## ===============================
@@ -393,6 +392,47 @@ list(
   percent_change = pct_change,
   confounding = confounding
 )
+
+
+## ===============================
+## 8) Wilcoxon signed rank test
+## ===============================
+
+# 基本上就是二项分布
+binom.test (x=2, n=11, p=0.5, conf.level =  0.95)
+
+
+## ===============================
+## 9) Wilcoxon signed rank test
+## ===============================
+
+x <- c(5260, 5470, 5640, 6180, 6390, 6515, 6805, 7515, 7515, 8230, 8770) # duplicated values, rank +0.5
+
+wilcox.test(x, mu = 7725, exact = FALSE, correct = TRUE)
+
+
+## ===============================
+## 10) Wilcoxon （ Mann- Whitney T test in R) - non-para test for two independent samples
+## ===============================
+
+data("airquality")
+
+df <- airquality[, c("Ozone", "Month")]
+df <- na.omit(df)  # 删除缺失值
+head(df)
+
+x <- df$Ozone[df$Month == 5]
+y <- df$Ozone[df$Month == 6]
+
+length(x); length(y)
+
+wilcox.test(x, y, alternative = "two.sided", paired = FALSE, correct = FALSE)
+
+
+## ===============================
+## 11) Wilcoxon （ Mann- Whitney U test in R) - non-para test for two independent samples
+## ===============================
+
 
 
 

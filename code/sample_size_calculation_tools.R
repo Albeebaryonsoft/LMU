@@ -190,7 +190,7 @@ library(ggplot2)
 
 ## 1) Bonferroni Correction: given alpha and sample size, calculate beta and draw distribution
 d <- 0.5
-n <- 64 # assume the sample size is 64
+n <- 100 # assume the sample size is 64,100, 200... power 会变大
 
 SE <- sqrt(2/n)
 NCP <- d / SE
@@ -263,6 +263,9 @@ ggplot() +
     )
   ) +
   theme_minimal(base_size = 14)
+
+
+
 
 # 2）Bonferroni Correction: given cohen's d, corrected alpha, expected beta, calculate sample size
 

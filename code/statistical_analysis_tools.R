@@ -170,7 +170,7 @@ t_stat; p_value; CI
 ## 3) proportion的置信区间与检验
 ## ===============================
 
-# ---- 单一比例 的 CI（近似/Wilson）与精确（Clopper-Pearson）
+# ---- 单one sample 的 CI（近似/Wilson）与精确（Clopper-Pearson）
 # 例：n=100 中成功 x=32
 x_success <- 471; n_total <- 1000
 
@@ -186,29 +186,29 @@ ci_prop_exact  # 检验总体p是不是0.2， 在p=0.3的情况下，观察到�
 
 
 
-# ---- 双比例 1. test for equality of proportions
-x1 <- 65; n1 <- 94
-x2 <- 63; n2 <- 74
+# ---- two sample proportion: z test 
+x1 <- 53; n1 <- 60
+x2 <- 34; n2 <- 50
 prop_2sample <- prop.test(c(x1, x2), c(n1, n2), conf.level = 0.95, correct = TRUE) # 比例差检验+CI
 prop_2sample
 
 prop.test(c(x1, x2), c(n1, n2), alternative = "less",  conf.level = 0.95,correct = TRUE) # H0: P1 >= P2 , H1: P1 < P2
 prop.test(c(x1, x2), c(n1, n2), alternative = "greater",  conf.level = 0.95,correct = TRUE) # H0: P1 <= P2 , H1: P1 > P2
 
-# ---- 双比例 2. test for independence (vs. association) in the 2*2 table : chi or fisher
-# display 2*2 table
-tab <- matrix(c(352, 100,  # n of success, n of failure
-                548, 300),
+
+# ---- two sample proportion: chi or fisher
+
+tab <- matrix(c(53, 7,  # n of success, n of failure
+                34, 16),
               nrow = 2, byrow = TRUE)
 colnames(tab) <- c("Success", "Failure")
 rownames(tab) <- c("Group1", "Group2")
 tab
 
-# chi
 result_1 <- chisq.test(tab, correct = FALSE)   # without Yates correction
 result_2 <- chisq.test(tab)                    # with Yates correction (default for 2x2)
-
 result_1; result_2
+
 
 # fisher test :for small samples or exact p-value)
 fisher.test(tab)
@@ -395,50 +395,47 @@ list(
 
 
 ## ===============================
-## 8) sign test
+## 8) sign test - for one sample and paired sample
 ## ===============================
 
 # 基本上就是二项分布
 binom.test (x=2, n=11, p=0.5, conf.level =  0.95)  # P = 0.065 
+binom.test (x=1, n=8, p=0.5, conf.level =  0.95)  
 
 
 ## ===============================
-## 9) Wilcoxon signed rank test
+## 9) Wilcoxon signed rank test - for one sample and paired sample 
 ## ===============================
 
 x <- c(5260, 5470, 5640, 6180, 6390, 6515, 6805, 7515, 7515, 8230, 8770) # duplicated values, rank +0.5
-
 wilcox.test(x, mu = 7725, exact = FALSE, correct = TRUE) # P = 0.0293 , 有参数后面的参数，因为有重复值
+
+x1 <- c(65,72,68,90,77,43,52,80,75)
+x2 <- c(84,78,68,89,91,44,66,89,93)
+
+wilcox.test(x1, x2,
+            paired = TRUE,
+            exact = FALSE,   
+            correct = TRUE)  # 1.5 < 3, p = 0.02471 < 0.05
+
 
 # compare with student t  p = 0.01814
 t.test(x, mu = 7725) 
 
 # t-test 在满足其假设（特别是接近正态、无明显离群值）的情况下，利用最多的信息 → 统计效率最高 → 在同样样本量下最易检出差异 → power 最大。
 
-## ===============================
-## 10) Wilcoxon （ Mann- Whitney U, test statistic T ) - non-para test for two independent samples
-## ===============================
 
-data("airquality")
-
-df <- airquality[, c("Ozone", "Month")]
-df <- na.omit(df)  # 删除缺失值
-head(df)
-
-x <- df$Ozone[df$Month == 5]
-y <- df$Ozone[df$Month == 6]
-
-length(x); length(y)
-
-wilcox.test(x, y, alternative = "two.sided", paired = FALSE, correct = FALSE)
 
 
 ## ===============================
-## 11) Wilcoxon （ Mann- Whitney U test in R) - non-para test for two independent samples
+## 10) Wilcoxon （ Mann- Whitney U test in R) - non-para test for two independent samples
 ## ===============================
 
-group1 <- c(6130,7050,7480,7480,7530,7580,7900,8080,8090,8110,8400,10150,10880)
-group2 <- c(8390,9190,9210,9680,9690,9970,11510,11850,12790)
+#group1 <- c(6130,7050,7480,7480,7530,7580,7900,8080,8090,8110,8400,10150,10880)
+#group2 <- c(8390,9190,9210,9680,9690,9970,11510,11850,12790)
+
+group1 <- c(65,72,68,90,77,43,52,80,75)
+group2 <- c(84,78,68,89,91,44,66,89,93)
 
 wilcox.test(group1,group2, alternative = "two.sided", paired = FALSE, correct = FALSE)
 # p=0.002372 < 0.05 , there is difference in average ranks in the two populations. 
@@ -459,10 +456,11 @@ wilcox_test(v ~ g, distribution = "exact")
 # coin 计算真实的exact p-value, 能正确处理ties重复值，所以p更小，更精确
 
 
-
 # 检验临界值25和88之外的面积是否为0.05
 qwilcox(0.025, 9, 13, lower.tail = TRUE, log.p =  FALSE)  
 qwilcox(0.025, 9, 13, lower.tail = FALSE, log.p =  FALSE)
 pwilcox(29,13,9,lower.tail = TRUE, log.p = FALSE) + pwilcox(88,13,9,lower.tail = FALSE, log.p = FALSE)
+
+
 
 

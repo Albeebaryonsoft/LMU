@@ -659,18 +659,36 @@ a\. How strong is the relationship between BMI and HDL (the "good" cholesterol)?
 
 ```{r}
 
+plot(data$bmi, data$hdl,
+     xlab = "BMI", ylab = "HDL",
+     main = "Scatterplot of BMI vs HDL")
+abline(lm(hdl ~ bmi, data = data), col = "red")
+
+
+boxplot(data$hdl)
+boxplot(data$bmi)
+
+cor(data$hdl, data$bmi,use="complete.obs")
+cor.test(data$hdl, data$bmi)
+
+cor(data$hdl, data$bmi, method = "spearman",use="complete.obs")
+cor.test(data$hdl, data$bmi, method = "spearman")
+
+
 model <- lm(hdl ~ bmi, data = data)
 summary(model)
+
 
 ```
 
 **Answer to 6a :**
 
-The linear regression model showed a statistically significant negative association between BMI and HDL cholesterol (β = –0.015, p \< 0.001).
+The scatterplot shows that HDL generally decreases as BMI increases, but the points are widely dispersed, indicating that the linear trend is present but weak. The boxplots also reveal several outliers. To obtain more robust and stable results, both Pearson’s r and Spearman’s ρ were therefore examined.
 
-However, the explanatory power of the model was limited: only 7.7% variation (R² = 0.077) in HDL can be explained by variation in BMI, indicating that BMI alone accounts for only a small proportion of the variability in HDL, and other factors, e.g., age, likely play major roles.
+The Pearson correlation between BMI and HDL was –0.28 (95% CI: –0.31 to –0.25), indicating a weak negative linear association. The relationship was highly statistically significant (t = –19.1, df = 4364, p < 2.2×10⁻¹⁶). In addition, the Spearman rank correlation was –0.33 (p < 2.2e-16), suggesting a slightly stronger monotonic decreasing pattern. Together, both measures support a statistically significant but relatively weak negative association between BMI and HDL.
 
-Since this was a simple (single-variable) regression, the adjusted R² was nearly identical to the unadjusted R² and therefore not further discussed.
+The simple linear regression yielded an R² of 0.077, meaning that approximately 7.7% of the variation in HDL levels can be statistically attributed to variation in BMI. This indicates that BMI alone has limited explanatory power, and most of the variation in HDL must be explained by other factors.
+
 
 
 b\. Does the relationship between HDL and BMI change when you adjust for age (categorized)? Interpret the coefficients of the resulting model (when you mean-center BMI before fitting the model, you can also interpret the intercept). Would you say that BMI has a clinically relevant impact on HDL, according to your model?
@@ -702,7 +720,9 @@ After mean-centering BMI and age, the intercept became interpretable: the center
 
 We also explored whether age modifies the effect of BMI on HDL by including a BMI × age interaction term. The interaction was not statistically significant (β = –8.4×10⁻⁵, p = 0.0746), indicating that the strength of the BMI–HDL association does not meaningfully differ across age levels.
 
-Although BMI showed strong statistical significance, the magnitude of its effect was small. Each one-unit increase in BMI was associated with only a 0.016 mmol/L decrease in HDL, meaning that even a 10-unit difference in BMI would change HDL by only ~0.16 mmol/L—well within the typical biological variability of HDL (often ±0.3–0.5 mmol/L). Thus, while the association is statistically robust, its clinical relevance appears limited in this dataset.
+Although BMI showed strong statistical significance, the magnitude of its effect was small. Each one-unit increase in BMI was associated with only a 0.016 mmol/L decrease in HDL, meaning that even a 10-unit difference in BMI would change HDL by only ~0.16 mmol/L—well within the typical biological variability of HDL (often ±0.3–0.5 mmol/L).
+
+Thus, while the association is statistically robust, its clinical relevance appears limited in this dataset.
 
 In addition to evaluating the regression coefficients, it is also important to consider the potential impact of missing data.
 
@@ -942,11 +962,16 @@ The following diagnostics ensure that the linear model is valid, unbiased, and r
 
 ```{r}
 
-par(mfrow = c(2,2))
+par(mfrow = c(3,2))
 plot(model_final)
 
 library(lmtest)
 dwtest(model_final)
+
+hist(residuals(model_final), 
+     breaks = 30,
+     main = "Histogram of Residuals",
+     xlab = "Residuals")
 
 cook <- cooks.distance(model_final)
 plot(cook, pch=20, main="Cook's Distance")
@@ -971,14 +996,16 @@ Diagnostic 3: Homoscedasticity (Scale–Location Plot)
 Most points are evenly scattered, with a slight increase in spread at higher fitted values. Residual variance is mostly constant, though mild heteroscedasticity may exist at the upper range of fitted values. Homoscedasticity is mostly satisfied
 
 
-Diagnostic 4: Outliers (Residuals vs Leverage, Cook’s Distance)
+Diagnostic 4: Independence of Residuals (Durbin–Watson Test)
+
+The Durbin–Watson statistic indicated no evidence of autocorrelation, which is expected given the cross-sectional structure of the NHANES dataset.The independence assumption is therefore satisfied.
+
+
+Diagnostic 5: Outliers (Residuals vs Leverage, Cook’s Distance)
 
 Most observations have low leverage. A few points (e.g., ID 3872) show moderately high leverage, but none approach the Cook’s distance threshold.These high-leverage points do not exert disproportionate influence on the regression coefficients. Alos, all Cook’s D values are far below 1. No observation approaches the typical cutoff for concern. The model is stable and not driven by single influential observations.
 
 
-Diagnostic 5: Independence of Residuals (Durbin–Watson Test)
-
-The Durbin–Watson statistic indicated no evidence of autocorrelation, which is expected given the cross-sectional structure of the NHANES dataset.The independence assumption is therefore satisfied.
 
 
 
@@ -1079,8 +1106,7 @@ tot <- sum(!is.na(data$cancer_ever))
 CI_CP <- binom.test(cancer, tot, conf.level = 0.95)
 tidy(CI_CP)
 
-CI_Wilson <- binom.confint(cancer, tot, conf.level = 0.95, methods = "wilson")
-CI_Wilson
+
 
 
 ```

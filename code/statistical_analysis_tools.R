@@ -463,4 +463,89 @@ pwilcox(29,13,9,lower.tail = TRUE, log.p = FALSE) + pwilcox(88,13,9,lower.tail =
 
 
 
+## ===============================
+## 11) Pearson's r — p-value and CI
+## ===============================
+
+
+data(mtcars)
+x <- mtcars$wt      # weight
+y <- mtcars$mpg     # miles per gallon
+
+cor.test(x, y, method = "pearson")
+
+
+
+
+
+## ===============================
+## 12) linear regression CI of mean response and observation value
+## ===============================
+
+a <- c (22, 39, 41, 48, 50,52, 52,54, 55,56,58, 58,60, 61)
+b <- c (28,  31, 27, 26, 31, 35,  43,29, 32, 30, 33, 34, 41,34)
+
+cor.test(a, b)
+model <- lm(b ~ a)
+summary(model)
+
+# predict a value when x = 57
+
+new <- data.frame(a = 57)
+
+predict(model, newdata = data.frame(a = 57))
+
+
+# calculate the CI of mean response
+CI_mean <- predict(model,
+                   newdata = new,
+                   interval = "confidence",
+                   level = 0.95)
+
+CI_mean
+
+# 分解步骤 CI of mean response
+pred_mean <- predict(model,newdata = new, se.fit = TRUE)
+
+pred_mean$fit      # 这是均值预测 \hat{y}(57)
+pred_mean$se.fit   # 这是 mean response 的 SE
+
+t_crit <- qt(0.975, df = df.residual(model))  # df = n - 2
+
+lower_mean <- pred_mean$fit - t_crit * pred_mean$se.fit
+upper_mean <- pred_mean$fit + t_crit * pred_mean$se.fit
+
+c(lower_mean, pred_mean$fit, upper_mean)
+
+CI_mean
+
+
+# calculate the CI of future observation
+PI_obs <- predict(model,
+                  newdata = new,
+                  interval = "prediction",
+                  level = 0.95)
+
+PI_obs
+
+
+# 步骤分解 CI of future observation
+
+SE_mean  <- pred_mean$se.fit
+sigma    <- summary(model)$sigma   # 残差标准差
+
+SE_pred  <- sqrt(SE_mean^2 + sigma^2)
+
+SE_mean
+SE_pred
+
+t_crit <- qt(0.975, df = df.residual(model))
+
+lower_pred <- pred_mean$fit - t_crit * SE_pred
+upper_pred <- pred_mean$fit + t_crit * SE_pred
+
+c(lower_pred, pred_mean$fit, upper_pred)
+
+
+qt(0.975, df = 12)
 

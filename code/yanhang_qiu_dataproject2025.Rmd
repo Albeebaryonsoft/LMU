@@ -1107,8 +1107,6 @@ CI_CP <- binom.test(cancer, tot, conf.level = 0.95)
 tidy(CI_CP)
 
 
-
-
 ```
 
 The estimated lifetime prevalence of cancer in the sample was 8.8%.
@@ -1130,7 +1128,7 @@ n1 <- sum(!is.na(data$cancer_ever[data$hrsworked_prvwk_cat == "< 40"]))
 x2 <- sum(data$cancer_ever[data$hrsworked_prvwk_cat == ">= 40"] == TRUE, na.rm = TRUE)
 n2 <- sum(!is.na(data$cancer_ever[data$hrsworked_prvwk_cat == ">= 40"]))
 
-prop_2sample <- prop.test(c(x1, x2), c(n1, n2), conf.level = 0.95, correct = TRUE) # 比例差检验+CI
+prop_2sample <- prop.test(c(x1, x2), c(n1, n2), conf.level = 0.95, correct = TRUE) 
 prop_2sample
 
 
@@ -1170,8 +1168,11 @@ round(results, 3)
 
 
 ```
+
 The logistic regression output shows log-odds coefficients, which were converted to odds ratios (OR) for easier interpretation.
+
 Workplace pollutant exposure was not significantly associated with cancer (OR = 1.11, 95% CI 0.87–1.42, p = 0.39).
+
 Age was a strong predictor: compared with the 18–34 age group, participants aged 35–49, 50–64, and 65–79 had 3.35-, 8.91-, and 22-fold higher odds of cancer, respectively (all p < 0.001).
 
 
@@ -1195,24 +1196,24 @@ Step 0. candidate covariates
 
 library(dplyr)
 vars <- c(
+
   "age",
-  "male", 
+  "male",
   "ethnic",
   "educ",
-  "increl",
-  
+
   "bmi",
-  "rr_sys",
-  "hdl",
-  "hg",
-  "cd",
-  
-  "sleep_dur",
-  "drnkprd_prv12mo",
   "cigsprd_prv30d",
-  
-  "phq2"  
+  "drnkprd_prv12mo",
+
+  "cd",
+  "hg",
+  "pb",    
+
+  "srhgnrl",  
+  "hivpos"
 )
+
 
 ```
 

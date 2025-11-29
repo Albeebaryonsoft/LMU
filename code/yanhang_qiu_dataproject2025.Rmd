@@ -22,7 +22,7 @@ a)  What are important characteristics of the NHANES study (study design, target
 
 b\. What general categories (such as "demographics", "lab results") can the variables in the dataset be sorted into?
 
-**Answer to 1b:**
+**Answer to 1b:**    
 
 The variables in the dataset can be categorized into groups such as demographic data, examination data,  dietary data, lifestyles, disease, family history, selfrated_health, depression, environment and toxic,
 
@@ -1211,7 +1211,7 @@ vars <- c(
   "drnkprd_prv12mo",
   "cigsprd_prv30d",
   
-  "phq2"   # PHQ-9 item 2: depressed/hopeless
+  "phq2"  
 )
 
 ```

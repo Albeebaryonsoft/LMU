@@ -769,7 +769,9 @@ This pattern of informative missingness likely attenuated the observed BMI–HDL
 
 c\. Try to find a better model to predict HDL by including more covariates. Select a number of candidate covariates which in your opinion may be related to HDL, and then choose a model selection strategy and a criterion/test for comparing models. Describe the model with the best fit according to your search, and interpret the model coefficients.
 
+
 **Answer to 6c:**
+
 
 The modeling process includes 7 steps:
 Step 0. candidate covariates
@@ -783,10 +785,12 @@ Step 7. Predictive Performance Evaluation and Interpretation
 
 
 Step 0. candidate covariates
+
 ```{r}
 
 library(dplyr)
-vars <- c(
+
+vars_lm <- c(
   "age",
   "male", 
   "ethnic",
@@ -795,7 +799,6 @@ vars <- c(
   
   "bmi",
   "rr_sys",
-  "hdl",
   "hg",
   "cd",
   
@@ -803,7 +806,9 @@ vars <- c(
   "drnkprd_prv12mo",
   "cigsprd_prv30d",
   
-  "phq2"   # PHQ-9 item 2: depressed/hopeless
+  "phq2",
+  "hdl"
+
 )
 
 ```
@@ -813,11 +818,10 @@ A set of 13 candidate variables was selected based on previous epidemiological e
 Step 1. Data Preparation
 
 ```{r}
-summary(data[, vars])
 
-data_sub <- data[ , vars]
+data_sub_lm <- data[ , vars_lm]
 
-data_sub <- data_sub %>%
+data_sub_lm <- data_sub %>%
   mutate(
     
     male = factor(male,
@@ -836,63 +840,62 @@ data_sub <- data_sub %>%
   )
 
 
-data_mod <- na.omit(data_sub)
+data_mod_lm_lm <- na.omit(data_sub_lm)
 
-
-str(data_mod)
-nrow(data_mod)
+str(data_mod_lm)
+nrow(data_mod_lm)
 
 ```
-
-
-Categorical covariates were converted to factor variables to ensure correct modeling of non-numeric levels. Abnormal value are recoded as NA.
+Categorical covariates were converted to factor variables to ensure correct modeling of non-numeric levels. Abnormal value are recoded as NA. After omitting samples with NA, 525 remain in the dataset. 
 
 
 Step 2. Exploratory Data Analysis (EDA)
 
 ```{r}
 
-hist(data_mod$hdl, main="HDL distribution", xlab="HDL")
-boxplot(data_mod$hdl, main="Boxplot of HDL")
-summary(data_mod$hdl)
+hist(data_mod_lm$hdl, main="HDL distribution", xlab="HDL")
+boxplot(data_mod_lm$hdl, main="Boxplot of HDL")
+summary(data_mod_lm$hdl)
 
 par(mfrow=c(2,3))
-plot(data_mod$age, data_mod$hdl, main="HDL vs age")
-plot(data_mod$bmi, data_mod$hdl, main="HDL vs BMI")
-plot(data_mod$rr_sys, data_mod$hdl, main="HDL vs SBP")
-plot(data_mod$hg, data_mod$hdl, main="HDL vs hg")
-plot(data_mod$cd, data_mod$hdl, main="HDL vs cadmium")
+plot(data_mod_lm$age, data_mod_lm$hdl, main="HDL vs age")
+plot(data_mod_lm$bmi, data_mod_lm$hdl, main="HDL vs BMI")
+plot(data_mod_lm$rr_sys, data_mod_lm$hdl, main="HDL vs SBP")
+plot(data_mod_lm$hg, data_mod_lm$hdl, main="HDL vs hg")
+plot(data_mod_lm$cd, data_mod_lm$hdl, main="HDL vs cd")
 
 par(mfrow=c(1,3))
-boxplot(hdl ~ male, data=data_mod, main="HDL by sex")
-boxplot(hdl ~ ethnic, data=data_mod, main="HDL by ethnic group")
-boxplot(hdl ~ educ, data=data_mod, main="HDL by education")
+boxplot(hdl ~ male, data=data_mod_lm, main="HDL by sex")
+boxplot(hdl ~ ethnic, data=data_mod_lm, main="HDL by ethnic group")
+boxplot(hdl ~ educ, data=data_mod_lm, main="HDL by education")
 
-cor_matrix <- cor(data_mod[, c("age","bmi","rr_sys","hg","cd")])
+cor_matrix <- cor(data_mod_lm[, c("age","bmi","rr_sys","hg","cd")])
 cor_matrix
 
-summary(data_mod[, c("age","bmi","rr_sys","hg","cd","sleep_dur")])
+summary(data_mod_lm[, c("age","bmi","rr_sys","hg","cd","sleep_dur")])
 
 ```
-Exploratory analyses were conducted on the complete-case dataset to evaluate data quality, characterize distributions, and assess whether linear regression was appropriate for modeling HDL.
+Exploratory analyses were performed on the complete-case dataset to assess data quality and the suitability of linear regression. HDL was unimodal with mild right-skewness and required no transformation. Continuous predictors showed plausible ranges and generally linear relationships with HDL. 
 
-The distribution of HDL was unimodal with mild right-skewness, and although several higher observations were present, none appeared excessively distant from the main body of the data. Accordingly, no transformation was required for the outcome.
+For hemoglobin and cadmium, concentrated low values with a few higher observations indicated right-skewness; therefore log-transformations (log-hg, log-cd) were applied to improve linearity and variance stability. 
 
-Continuous predictors (age, BMI, systolic blood pressure, hemoglobin, cadmium, and sleep duration) showed plausible ranges and expected population variability. Scatterplots demonstrated roughly linear trends with HDL, most notably a clear negative relationship with BMI. No variable displayed marked curvature or patterns indicating the need for polynomial or spline terms. 
-
-Categorical predictors—including sex, ethnicity, and education—showed visible group differences in HDL, supporting their inclusion in the regression model.
-
-Pairwise correlations among continuous variables were modest (all |r| < 0.4), suggesting no substantial collinearity at this stage. No influential outliers or implausible values remained after data cleaning and recoding.
-
-Overall, the distributional characteristics, linear-appearing relationships, and absence of major anomalies indicated that a standard multiple linear regression model was appropriate for these data.
+Categorical predictors displayed clear group differences. Correlations among continuous variables were modest (all |r| < 0.4), and no influential outliers remained after cleaning. Overall, the data supported proceeding with a standard multiple linear regression model.
 
 
 Step 3. Specification of the Initial Full Model
 
 ```{r}
 
-#association evaluation 
-model <- lm(hdl ~ ., data = data_mod)  
+library(dplyr)
+
+data_mod_lm <- data_mod %>%
+  mutate(
+    log_cd = log(cd),
+    log_hg = log(hg)
+  ) %>%
+  select(-cd, -hg)
+
+model <- lm(hdl ~ ., data = data_mod_lm)  
 summary(model)
 
 library(car)
@@ -900,17 +903,9 @@ vif(model)
 
 ```
 
-The full model explained approximately 25.82% of the variability in HDL levels, 
-Among all predictors, sex, BMI, systolic blood pressure, and cigarette consumption remained statistically significant.
+The full model explained about 26% of the variability in HDL. Significant predictors were sex, BMI, systolic blood pressure, cigarette consumption, and log_cd.Among categorical variables, only Black ethnicity differed significantly from the reference group.Education and income categories were not associated with HDL.All GVIF values were below 2, indicating no multicollinearity concerns.
 
-For the categorical predictors, Black ethnicity showed a significantly higher HDL level compared with the reference group (Hispanic), whereas the other ethnicity categories did not reach statistical significance.
-
-Education level and income category, included as multi-level factors, did not demonstrate independent associations with HDL.
-
-To evaluate multicollinearity, we examined the Generalized Variance Inflation Factor (GVIF), which accounts for multi-level categorical variables. All GVIF values were well below 2, indicating no evidence of problematic multicollinearity in the model.
-
-Overall, these diagnostic results support the adequacy of the selected covariates.Accordingly, we proceeded with the full set of 13 variables for subsequent model refinement and interpretation.
-
+We therefore proceeded with the full adjusted model for interpretation.
 
 
 Step 4. Model Selection - AIC
@@ -918,9 +913,9 @@ Step 4. Model Selection - AIC
 ```{r}
 
 model_full <- lm(hdl ~ age + male + ethnic + educ + increl +
-                   bmi + rr_sys + hg + cd +
-                   sleep_dur + drnkprd_prv12mo + cigsprd_prv30d + phq2,
-                 data = data_mod, na.action = na.omit)
+                   bmi + rr_sys +
+                   sleep_dur + drnkprd_prv12mo + cigsprd_prv30d + phq2 + log_cd + log_hg,
+                 data = data_mod_lm, na.action = na.omit)
 
 # model_step <- step(model_full, direction = "backward")
 
@@ -933,13 +928,7 @@ cat(final_block, sep = "\n")
 
 ```
 
-Using backward stepwise selection based on AIC, the final HDL model retained seven predictors: sex, ethnicity, BMI, systolic blood pressure, blood cadmium, cigarette consumption, and age.
-
-In the final model, age showed only a weak and statistically non-significant association with HDL (p = 0.076). This suggests that the crude relationship between age and HDL was largely explained by other covariates—particularly BMI, blood pressure, smoking, and cadmium exposure—which are themselves correlated with age. After adjusting for these factors, age did not exhibit an independent contribution to HDL variation.
-
-BMI remained the strongest predictor, showing a pronounced negative association with HDL. Sex and ethnicity also had meaningful effects, with males and certain ethnic groups having higher HDL levels compared with their reference categories. Systolic blood pressure and cigarette consumption showed smaller but statistically robust associations: HDL increased modestly with higher systolic blood pressure and decreased with greater cigarette use.
-
-Cadmium, although borderline in statistical significance, improved model fit and was therefore retained. Removing cadmium increased the AIC from –1013.51 to –1012.73, indicating that cadmium contributed incremental explanatory value despite its non-significant p-value.
+Using backward AIC selection, the final model retained seven predictors—age, sex, ethnicity, BMI, systolic blood pressure, cigarette consumption, and log-transformed cadmium—yielding the minimum AIC (AIC=-1014.83).
 
 
 Step 5. Assessment of Multicollinearity
@@ -947,14 +936,15 @@ Step 5. Assessment of Multicollinearity
 
 library(car)
 
-model_final <- lm(hdl ~ age + male + ethnic + bmi + rr_sys + cd + cigsprd_prv30d,
-                  data = data_mod)
+model_final <- lm(hdl ~ age + male + ethnic + bmi + rr_sys + cigsprd_prv30d + log_cd,
+                  data = data_mod_lm)
 
 vif(model_final)
 
 
 ```
-
+ Since all adjusted GVIF values were well below the commonly used threshold of 2, there was no indication of problematic multicollinearity in the final model.
+ 
 
 Step 6. Model Diagnostics and Assumption Checking
 
@@ -962,7 +952,7 @@ The following diagnostics ensure that the linear model is valid, unbiased, and r
 
 ```{r}
 
-par(mfrow = c(3,2))
+par(mfrow = c(2,3))
 plot(model_final)
 
 library(lmtest)
@@ -998,7 +988,7 @@ Most points are evenly scattered, with a slight increase in spread at higher fit
 
 Diagnostic 4: Independence of Residuals (Durbin–Watson Test)
 
-The Durbin–Watson statistic indicated no evidence of autocorrelation, which is expected given the cross-sectional structure of the NHANES dataset.The independence assumption is therefore satisfied.
+The Durbin–Watson statistic indicated no evidence of autocorrelation (p=0.144 > 0.05), which is expected given the cross-sectional structure of the NHANES dataset.The independence assumption is therefore satisfied.
 
 
 Diagnostic 5: Outliers (Residuals vs Leverage, Cook’s Distance)
@@ -1015,18 +1005,18 @@ Step 7. Predictive Performance Evaluation and Interpretation
 
 set.seed(123)
 
-n <- nrow(data_mod)
+n <- nrow(data_mod_lm)
 train_index <- sample(1:n, size = 0.8*n)
 
-train <- data_mod[train_index, ]
-test  <- data_mod[-train_index, ]
+train <- data_mod_lm[train_index, ]
+test  <- data_mod_lm[-train_index, ]
 
 pred_aic <- predict(model_final, newdata = test)
 mse_aic_full <- mean((pred_aic - test$hdl)^2)
 
 
 model_step_train <- lm(
-  hdl ~ age + male + ethnic + bmi + rr_sys + cd + cigsprd_prv30d,
+  hdl ~ age + male + ethnic + bmi + rr_sys + cigsprd_prv30d + log_cd,
   data = train
 )
 
@@ -1041,7 +1031,7 @@ summary(model_step_train)
 
 ```
 
-In our analysis, the mean squared error (MSE) obtained by applying the full-data model to the test set ( 0.1388587) was slightly lower than the MSE obtained using the training-only fitted model (0.1465096).
+In our analysis, the mean squared error (MSE) obtained by applying the full-data model to the test set ( 0.137) was slightly lower than the MSE obtained using the training-only fitted model (0.145).
 
 This small difference is expected: because the full model was trained on the entire dataset—including observations that later appeared in the test set—it produces optimistically biased (overly favorable) predictions.
 
@@ -1054,38 +1044,51 @@ This suggests that the final model does not exhibit overfitting and shows good g
 summary(model_final)
 ```
 
-The final model for predicting HDL levels included the covariates age, sex, ethnicity, BMI, systolic blood pressure (rr_sys), blood cadmium (cd), and recent cigarette consumption (cigsprd_prv30d).
+The final model for predicting HDL levels included the covariates age, sex, ethnicity, BMI, systolic blood pressure (rr_sys), recent cigarette consumption (cigsprd_prv30d), and log-transformed blood cadmium (log_cd).
 
 Adjusting for all other predictors:
 
 • Age
-Each additional year of age was associated with a 0.002105 mmol/L increase in HDL (β = 0.00217, p = 0.0850 ). This effect was small and not statistically significant, indicating that age has only a modest independent contribution once demographic and lifestyle factors are controlled.
+
+Each additional year of age was associated with a 0.00193 mmol/L increase in HDL (β = 0.00193, p = 0.115).
+The association was small and not statistically significant.
 
 • Sex
-Males had 0.155 mmol/L higher HDL compared with females (β = 0.155403, p < 0.001). This was one of the strongest predictors in the model.
+
+Males had 0.153 mmol/L higher HDL compared with females (β = 0.15345, p < 0.001).
+This remained one of the strongest predictors in the model.
 
 • Ethnicity
-Relative to the Hispanic reference group:
-White individuals: +0.092 mmol/L (p = 0.0813)
-Black individuals: +0.243 mmol/L (p < 0.001)
-Other/Mixed individuals: +0.136 mmol/L (p = 0.0491)
-Ethnicity was therefore an important overall predictor, with the Black group showing a particularly strong positive association with HDL.
 
-• BMI (Body Mass Index)
-Each 1-unit increase in BMI was associated with a 0.0248 mmol/L decrease in HDL (β = -0.025, p < 0.000). BMI was the strongest predictor in the model, consistent with well-established evidence linking adiposity with lower HDL.
+Relative to the Hispanic reference group:
+
+White: +0.0839 mmol/L (p = 0.113)
+
+Black: +0.2303 mmol/L (p < 0.001)
+
+Other/Mixed: +0.1275 mmol/L (p = 0.0647)
+
+Black ethnicity showed a clear positive association with HDL; the other categories did not reach significance.
+
+• BMI
+
+Each 1-unit increase in BMI was associated with a 0.0245 mmol/L decrease in HDL (β = –0.02445, p < 0.001).
+BMI was the strongest predictor, showing a robust inverse relationship.
 
 • Systolic Blood Pressure (rr_sys)
-A 1 mmHg increase in systolic blood pressure corresponded to a 0.0026 mmol/L increase in HDL (β = 0.00266, p = 0.0118). Although statistically significant, the effect size was small and likely not clinically meaningful.
 
-• Blood Cadmium (cd)
-Each unit increase in blood cadmium was associated with a 0.0033 mmol/L increase in HDL (β = 0.0032, p = 0.0986). The effect was not statistically significant, but AIC model selection retained cadmium because removing it increased AIC, indicating a worse model fit and suggesting cadmium still provides incremental explanatory value.
+A 1 mmHg increase in systolic blood pressure corresponded to a 0.00264 mmol/L increase in HDL (β = 0.00264, p = 0.011).
+The effect was statistically significant but small.
 
 • Recent Cigarette Consumption (cigsprd_prv30d)
-Each additional cigarette smoked in the past 30 days was associated with a 0.0051 mmol/L decrease in HDL (β = -0.005057, p = 0.0108). This represents a meaningful and statistically significant negative effect, consistent with strong epidemiological evidence that smoking lowers HDL.
 
-Overall, BMI, sex, ethnicity, systolic blood pressure, and cigarette consumption contributed to explaining variation in HDL levels, with BMI and sex being the most influential predictors. 
+Each additional cigarette consumed in the past 30 days was associated with a 0.00546 mmol/L decrease in HDL (β = –0.00546, p = 0.0067).
+This was a meaningful and statistically significant negative effect.
 
-Although age and cadmium were not individually significant, they were retained based on theoretical relevance and AIC model selection.
+• Log-transformed cadmium (log_cd)
+
+A 1-unit increase in log_cd was associated with a 0.0507 mmol/L increase in HDL (β = 0.05073, p = 0.045).
+This association was statistically significant and improved model fit.
 
 
 
@@ -1095,9 +1098,8 @@ a\. Estimate the lifetime prevalence of cancer. Can you also give an interval es
 
 ```{r}
 
+library(broom)
 library(binom)
-library(tidyr)
-library(broom)   
 
 cancer <- sum(data$cancer_ever == TRUE, na.rm = TRUE)
 tot <- sum(!is.na(data$cancer_ever))
@@ -1109,12 +1111,8 @@ tidy(CI_CP)
 
 ```
 
-The estimated lifetime prevalence of cancer in the sample was 8.8%.
-
-Using an exact binomial method, the 95% confidence interval ranged from 8.0% to 9.6%.Using a Wilson score interval, the estimate was virtually identical (95% CI: 8.0% to 9.6%), with a slightly narrower lower bound.
-
-Overall, the lifetime cancer prevalence is approximately 8–10% in this population.
-
+The estimated lifetime prevalence of cancer in the sample was 8.8%. 
+Using an exact binomial method, the 95% confidence interval ranged from 8.0% to 9.6%. 
 
 
 b\. What are the prevalence estimates in those who were exposed to pollutants at work for a longer time period, and in those who weren’t? Is there a significant difference in prevalence between these two subgroups?
@@ -1122,41 +1120,41 @@ b\. What are the prevalence estimates in those who were exposed to pollutants at
 
 ```{r}
 
-x1 <- sum(data$cancer_ever[data$hrsworked_prvwk_cat == "< 40"] == TRUE, na.rm = TRUE)
-n1 <- sum(!is.na(data$cancer_ever[data$hrsworked_prvwk_cat == "< 40"]))
+x1 <- sum(data$cancer_ever[data$workpollut== 1 ] == TRUE, na.rm = TRUE)
+n1 <- sum(!is.na(data$cancer_ever[data$workpollut == 1]))
+p1 <- x1/(n1-x1)
 
-x2 <- sum(data$cancer_ever[data$hrsworked_prvwk_cat == ">= 40"] == TRUE, na.rm = TRUE)
-n2 <- sum(!is.na(data$cancer_ever[data$hrsworked_prvwk_cat == ">= 40"]))
+x2 <- sum(data$cancer_ever[data$workpollut == 0] == TRUE, na.rm = TRUE)
+n2 <- sum(!is.na(data$cancer_ever[data$workpollut == 0 ]))
+p2 <- x2/(n2-x2)
 
 prop_2sample <- prop.test(c(x1, x2), c(n1, n2), conf.level = 0.95, correct = TRUE) 
-prop_2sample
 
+OR <- p1/p2 
 
+p1;p2; OR; prop_2sample
 ```
-
-The lifetime prevalence of cancer was 5.27% among participants working less than 40 hours per week and 4.29% among those working 40 hours or more.
-A two-sample test for equality of proportions showed no statistically significant difference between the two groups (χ² = 0.95, p = 0.33).
-The 95% confidence interval for the difference in prevalence (–0.96% to 2.93%) includes zero, indicating that the observed difference is compatible with random variation.
-Therefore, there is no evidence of a significant association between longer weekly working hours and cancer prevalence in this sample.
+Among individuals exposed to workplace pollutants for a longer period, the prevalence of the outcome was 7.6%.
+Among those without such exposure, the prevalence was 6.9%.A two-sample test for equality of proportions showed no statistically significant difference between the two groups (χ² = 0.67, p = 0.414).
 
 
 c\. Adjust for age in the relationship between lifetime diagnosis of cancer and exposure to pollutants, using the categorized age variable (Note: No information on pollutant exposure was collected from participants aged 80+, so these cannot be included in the analysis). Does the adjustment for age change the picture? Interpret the model coefficients including the intercept.
 
 ```{r}
 
-vars_log <- c("cancer_ever", "workpollut", "age_group")
-data_mod_log <- data[, vars_1] %>% na.omit()
+vars_log <- c("cancer_ever", "workpollut", "age_group") 
+data_mod_log <- data[, vars_log] %>% na.omit()
 
-data_mod_log$workpollut <- factor(data_mod_2$workpollut)
-data_mod_log$age_group  <- factor(data_mod_2$age_group)
+data_mod_log$workpollut <- factor(data_mod_log$workpollut)
+data_mod_log$age_group  <- factor(data_mod_log$age_group)
+
 
 model_full_log <- glm(
   cancer_ever ~ workpollut + age_group,
-  data = data_mod,
+  data = data_mod_log,
   family = binomial
 )
 
-summary(model_full_log)
 
 OR <- exp(coef(model_full_log))
 CI <- exp(confint(model_full_log))
@@ -1169,12 +1167,11 @@ round(results, 3)
 
 ```
 
-The logistic regression output shows log-odds coefficients, which were converted to odds ratios (OR) for easier interpretation.
+After adjusting for age categories, the association between workplace pollutant exposure and lifetime cancer diagnosis did not materially change. The adjusted odds ratio remained 1.11 (95% CI 0.87–1.42), almost identical to the unadjusted estimate, indicating no significant association. 
 
-Workplace pollutant exposure was not significantly associated with cancer (OR = 1.11, 95% CI 0.87–1.42, p = 0.39).
+With pollut status being controled: Compared with the youngest age group, people aged 35–49 have about three times higher odds of having been diagnosed with cancer.This rises sharply in older groups: those aged 50–64 have nearly nine times the odds, and those aged 65–79 have more than twenty times the odds.
 
-Age was a strong predictor: compared with the 18–34 age group, participants aged 35–49, 50–64, and 65–79 had 3.35-, 8.91-, and 22-fold higher odds of cancer, respectively (all p < 0.001).
-
+The intercept (OR 0.011) reflects the very low baseline odds of cancer in unexposed individuals in the youngest age group. 
 
 
 d.Try to find a good model of cancer diagnosis, describe, and interpret it, as you did for HDL.
@@ -1194,33 +1191,81 @@ Step 7. Predictive Performance Evaluation and Interpretation
 Step 0. candidate covariates
 ```{r}
 
-library(dplyr)
-vars <- c(
+vars_glm <- c(
 
   "age",
   "male",
   "ethnic",
   "educ",
-
+  
   "bmi",
-  "cigsprd_prv30d",
-  "drnkprd_prv12mo",
+  "smokstat",
+  "alc_lft",
 
   "cd",
   "hg",
   "pb",    
 
   "srhgnrl",  
-  "hivpos"
+  
+  "cancer_ever"
 )
 
+table(data_raw$cancer_ever)
+
+data_sub_glm <- data[, vars_glm]
+summary(data_sub_glm)
 
 ```
+
+Based on epidemiological relevance, data availability, and prior literature, we initially selected a set of demographic, socioeconomic, lifestyle, and biomarker variables—including age, sex, ethnicity, education, BMI, smoking, alcohol consumption, blood metal exposures (cadmium, mercury, lead), self-rated health, HIV status, and cancer history—for further analysis.
 
 
 Step 1. Data Preparation
 ```{r}
 
+data_mod_glm <- data_sub_glm %>%
+  mutate(
+
+    male = factor(male,
+                  levels = c(0, 1),
+                  labels = c("Female", "Male")),
+
+    ethnic = factor(ethnic,
+                    levels = c(1, 2, 3, 4),
+                    labels = c("Hispanic", "White", "Black", "Other/Mixed")),
+
+    educ = factor(educ,
+                  levels = c(1, 2, 3, 4, 5)),
+
+    srhgnrl = factor(srhgnrl,
+                     levels = c(1, 2, 3, 4, 5),
+                     labels = c("Excellent", "Very good", "Good", "Fair", "Poor")),
+
+    smokstat = factor(smokstat,
+                      levels = c(1, 2, 3),
+                      labels = c("Non-smoker", "Occasional smoker", "Daily smoker")),
+
+    alc_lft = factor(alc_lft,
+                     levels = c(1, 2, 3),
+                     labels = c("Never", "Rarely", "Regularly")),
+    
+    cancer_ever = factor(cancer_ever,
+                         levels = c(0, 1),
+                         labels = c("No cancer", "Cancer"))
+  )  
+
+data_mod_glm <- data_mod_glm %>%
+  mutate(
+    log_cd = log(cd),
+    log_hg = log(hg),
+    log_pb = log(pb)
+  )
+
+data_mod_glm <- data_mod_glm %>% na.omit()
+
+nrow(data_mod_glm)
+summary(data_mod_glm)
 ```
 
 

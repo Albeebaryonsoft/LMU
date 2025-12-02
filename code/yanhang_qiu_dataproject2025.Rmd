@@ -1239,6 +1239,7 @@ summary(data_mod_glm)
 ```
 
 
+
 Step 2. Exploratory Data Analysis (EDA)
 ```{r Step 2. Exploratory Data Analysis}
 
@@ -1282,7 +1283,6 @@ univar_table
 ```
 
 The overall data quality was good, and the number of cancer events was sufficient for logistic regression. Blood metal concentrations showed strong right-skewness and therefore required logarithmic transformation. The crude associations of BMI and smoking with cancer were influenced by survivor bias and reverse causation inherent to the cross-sectional design; however, all covariates were retained in the multivariable model to appropriately adjust for confounding.
-
 
 
 
@@ -1336,6 +1336,7 @@ library(broom)
 tidy(model_stepAIC, conf.int = TRUE, exp = TRUE)
 
 ```
+
 
 
 Step 5. Model Diagnostics and Assumption Checking

@@ -1168,7 +1168,6 @@ colnames(results) <- c("OR", "2.5%", "97.5%")
 
 round(results, 3)
 
-
 ```
 
 After adjusting for age categories, the association between workplace pollutant exposure and lifetime cancer diagnosis did not materially change. The adjusted odds ratio remained 1.11 (95% CI 0.87–1.42), almost identical to the unadjusted estimate, indicating no significant association. 

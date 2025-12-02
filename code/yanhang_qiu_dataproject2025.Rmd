@@ -1148,20 +1148,19 @@ The intercept (OR 0.011) reflects the very low baseline odds of cancer in unexpo
 
 d.Try to find a good model of cancer diagnosis, describe, and interpret it, as you did for HDL.
 
-7 steps:
+6 steps:
 Step 0. candidate covariates
 Step 1. Data Preparation
 Step 2. Exploratory Data Analysis (EDA)
 Step 3. Specification of the Initial Full Model
 Step 4. Model Selection - AIC
-Step 5. Assessment of Multicollinearity
-Step 6. Model Diagnostics and Assumption Checking
-Step 7. Interpretation
+Step 5. Model Diagnostics and Assumption Checking
+Step 6. Interpretation
 
 
 
 Step 0. candidate covariates
-```{r}
+```{r Step 0. candidate covariates}
 
 vars_glm <- c(
 
@@ -1173,12 +1172,11 @@ vars_glm <- c(
   "bmi",
   "smokstat",
   "alc_lft",
+  "diab_lft",
 
   "cd",
   "hg",
   "pb",    
-
-  "srhgnrl",  
   
   "cancer_ever"
 )
@@ -1190,11 +1188,10 @@ summary(data_sub_glm)
 
 ```
 
-Based on epidemiological relevance, data availability, and prior literature, we initially selected a set of demographic, socioeconomic, lifestyle, and biomarker variables—including age, sex, ethnicity, education, BMI, smoking, alcohol consumption, blood metal exposures (cadmium, mercury, lead), self-rated health, HIV status, and cancer history—for further analysis.
 
 
 Step 1. Data Preparation
-```{r}
+```{r Step 1. Data Preparation}
 
 data_mod_glm <- data_sub_glm %>%
   mutate(
@@ -1208,11 +1205,8 @@ data_mod_glm <- data_sub_glm %>%
                     labels = c("Hispanic", "White", "Black", "Other/Mixed")),
 
     educ = factor(educ,
-                  levels = c(1, 2, 3, 4, 5)),
-
-    srhgnrl = factor(srhgnrl,
-                     levels = c(1, 2, 3, 4, 5),
-                     labels = c("Excellent", "Very good", "Good", "Fair", "Poor")),
+                  levels = c(1, 2, 3, 4, 5),
+                  labels = c("1", "2", "3", "4","5")),
 
     smokstat = factor(smokstat,
                       levels = c(1, 2, 3),
@@ -1221,6 +1215,9 @@ data_mod_glm <- data_sub_glm %>%
     alc_lft = factor(alc_lft,
                      levels = c(1, 2, 3),
                      labels = c("Never", "Rarely", "Regularly")),
+    diab_lft = factor(diab_lft,
+                     levels = c(1, 2, 3),
+                     labels = c("None", "Prediabetes", "Diabetes")),
     
     cancer_ever = factor(cancer_ever,
                          levels = c(0, 1),
@@ -1236,55 +1233,159 @@ data_mod_glm <- data_mod_glm %>%
 
 data_mod_glm <- data_mod_glm %>% na.omit()
 
+
 nrow(data_mod_glm)
 summary(data_mod_glm)
 ```
 
 
 Step 2. Exploratory Data Analysis (EDA)
-```{r}
+```{r Step 2. Exploratory Data Analysis}
+
+summary(data_mod_glm)
+sapply(data_mod_glm, function(x) sum(is.na(x)))
+
+table(data_mod_glm$cancer_ever)
+
+numeric_vars <- c("bmi","cd","hg","pb")
+par(mfrow=c(2,2))
+for (v in numeric_vars) hist(data_mod_glm[[v]], main=v, col="gray")
+par(mfrow=c(1,1))
+
+
+cat_vars <- c("male","ethnic","educ","smokstat","alc_lft","diab_lft")
+lapply(data_mod_glm[, cat_vars], table)
+
+for (v in numeric_vars) {
+  boxplot(data_mod_glm[[v]] ~ data_mod_glm$cancer_ever,
+          main=paste(v, "by cancer status"))
+}
+
+
+library(broom)
+univar_vars <- c("age","bmi","cd","hg","pb","male","smokstat","alc_lft","diab_lft")
+
+results <- lapply(univar_vars, function(v) {
+  f <- as.formula(paste("cancer_ever ~", v))
+  mod <- glm(f, family = binomial, data = data_mod_glm)
+  tidy_mod <- tidy(mod, conf.int = TRUE, exp = TRUE)  
+  tidy_mod$variable <- v
+  return(tidy_mod)
+})
+
+univar_table <- do.call(rbind, results)
+univar_table <- univar_table[univar_table$term != "(Intercept)", ]
+
+univar_table
+
 
 ```
+
+The overall data quality was good, and the number of cancer events was sufficient for logistic regression. Blood metal concentrations showed strong right-skewness and therefore required logarithmic transformation. The crude associations of BMI and smoking with cancer were influenced by survivor bias and reverse causation inherent to the cross-sectional design; however, all covariates were retained in the multivariable model to appropriately adjust for confounding.
+
 
 
 
 Step 3. Specification of the Initial Full Model
-```{r}
+```{r Step 3. Specification of the Initial Full Model}
+
+
+data_mod_glm$diabetes_status <- data$diabetes_status[match(rownames(data_mod_glm), rownames(data))]
+data_mod_glm$diabetes_status <- factor(data_mod_glm$diabetes_status)
+
+library(dplyr)
+
+data_mod_glm <- data_mod_glm %>%
+  mutate(
+    log_cd = log(cd + 0.001),
+    log_hg = log(hg + 0.001),
+    log_pb = log(pb + 0.001)
+  )
+
+
+model <- glm(
+ cancer_ever ~ age + male + ethnic + educ +
+   bmi + smokstat + alc_lft + diabetes_status +
+   log_cd + log_hg + log_pb,
+ family = binomial, data = data_mod_glm
+)
+
+summary(model)
 
 ```
-
 
 
 
 Step 4. Model Selection - AIC
-```{r}
+```{r Step 4. Model Selection - AIC}
+library(MASS)
+model_full <- glm(
+  cancer_ever ~ age + male + ethnic + educ +
+    bmi + smokstat + alc_lft + diabetes_status +
+    log_cd + log_hg + log_pb,
+  family = binomial,
+  data = data_mod_glm
+)
+
+
+model_final_glm <- stepAIC(model_full, direction = "backward", trace = TRUE)
+summary(model_final_glm)
+
+
+library(broom)
+tidy(model_stepAIC, conf.int = TRUE, exp = TRUE)
 
 ```
 
 
+Step 5. Model Diagnostics and Assumption Checking
+```{r Step 5. Model Diagnostics and Assumption Checking}
+
+library(car)
+vif(model)
+
+plot(cooks.distance(model), type="h", main="Cook's Distance")
+abline(h = 4/length(model$fitted.values), col="red", lty=2)
+
+plot(hatvalues(model), main="Leverage", ylab="Hat values")
+abline(h = 2*length(coef(model))/nrow(data_mod_glm), col="red", lty=2)
+
+plot(rstandard(model), main="Standardized Residuals")
+abline(h = c(-3, 3), col="red", lty=2)
+
+install.packages("ResourceSelection")
+library(ResourceSelection)
+hoslem.test(model$y, fitted(model), g=10)
 
 
-Step 5. Assessment of Multicollinearity
-```{r}
+library(car)
+boxTidwell(cancer_ever ~ age, data = data_mod_glm)
 
+plot(model, which=1)
 ```
 
 
 
-
-Step 6. Model Diagnostics and Assumption Checking
-```{r}
-
+Step 6. Interpretation
+```{r Step 6. Interpretation}
+summary(model_final_glm)
 ```
 
+The final AIC-optimized logistic regression model identified age and ethnicity as the only independent predictors of lifetime cancer diagnosis.
+
+Age was the strongest predictor of cancer history (β = 0.0635, p < 0.001). Converted to an odds ratio: 
+OR = exp (0.0635) = 1.0656
+This indicates that each additional year of age is associated with a 6.6% increase in the odds of having ever been diagnosed with cancer, reflecting the cumulative nature of cancer risk.
 
 
-Step 7. Predictive Performance Evaluation and Interpretation
-```{r}
+Compared with the Hispanic reference group: White individuals had significantly higher odds of cancer diagnosis 
+OR = exp(0.57) =1.77 (p=0.041), 
+meaning their lifetime cancer diagnosis odds were ~77% higher.
 
-```
+Black and Other/Mixed ethnic groups did not differ significantly from the Hispanic group
+(p = 0.596 and p = 0.876, respectively), and their confidence intervals crossed the null.
 
-
+These findings are consistent with known epidemiological patterns in the U.S., where White adults exhibit higher lifetime prevalence of cancers such as breast, prostate, and skin cancer.
 
 
 

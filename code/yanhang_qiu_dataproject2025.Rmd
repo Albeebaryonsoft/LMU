@@ -851,6 +851,8 @@ Categorical covariates were converted to factor variables to ensure correct mode
 
 Step 2. Exploratory Data Analysis (EDA)
 
+For linear regression, the EDA should check whether each continuous predictor shows an approximately linear relationship with the continuous outcome, examine correlations between predictors to detect multicollinearity, and identify major skewness or extreme outliers in each predictor variable that could distort estimation.
+
 ```{r}
 
 hist(data_mod_lm$hdl, main="HDL distribution", xlab="HDL")
@@ -875,7 +877,9 @@ cor_matrix
 summary(data_mod_lm[, c("age","bmi","rr_sys","hg","cd","sleep_dur")])
 
 ```
-Exploratory analyses were performed on the complete-case dataset to assess data quality and the suitability of linear regression. HDL was unimodal with mild right-skewness and required no transformation. Continuous predictors showed plausible ranges and generally linear relationships with HDL. 
+
+
+HDL was unimodal with mild right-skewness and required no transformation. Continuous predictors showed plausible ranges and generally linear relationships with HDL. 
 
 For hemoglobin and cadmium, concentrated low values with a few higher observations indicated right-skewness; therefore log-transformations (log-hg, log-cd) were applied to improve linearity and variance stability. 
 
@@ -1206,8 +1210,6 @@ vars_glm <- c(
   "hg",
   "pb",    
 
-  "srhgnrl",  
-  
   "cancer_ever"
 )
 
@@ -1216,13 +1218,17 @@ table(data_raw$cancer_ever)
 data_sub_glm <- data[, vars_glm]
 summary(data_sub_glm)
 
+
+
 ```
 
-Based on epidemiological relevance, data availability, and prior literature, we initially selected a set of demographic, socioeconomic, lifestyle, and biomarker variables—including age, sex, ethnicity, education, BMI, smoking, alcohol consumption, blood metal exposures (cadmium, mercury, lead), self-rated health, HIV status, and cancer history—for further analysis.
+Based on epidemiological relevance, data availability, and prior literature, we initially selected a set of demographic, socioeconomic, lifestyle, and biomarker variables—including age, sex, ethnicity, education, BMI, smoking, alcohol consumption, blood metal exposures (cadmium, mercury, lead), self-rated health, and cancer history—for further analysis.
 
 
 Step 1. Data Preparation
 ```{r}
+
+library(dplyr)     
 
 data_mod_glm <- data_sub_glm %>%
   mutate(
@@ -1236,11 +1242,8 @@ data_mod_glm <- data_sub_glm %>%
                     labels = c("Hispanic", "White", "Black", "Other/Mixed")),
 
     educ = factor(educ,
-                  levels = c(1, 2, 3, 4, 5)),
-
-    srhgnrl = factor(srhgnrl,
-                     levels = c(1, 2, 3, 4, 5),
-                     labels = c("Excellent", "Very good", "Good", "Fair", "Poor")),
+                  levels = c(1,2,3,4,5),
+                  labels = c("edu1","edu2", "edu3", "edu4" ,"edu5")),
 
     smokstat = factor(smokstat,
                       levels = c(1, 2, 3),
@@ -1255,12 +1258,6 @@ data_mod_glm <- data_sub_glm %>%
                          labels = c("No cancer", "Cancer"))
   )  
 
-data_mod_glm <- data_mod_glm %>%
-  mutate(
-    log_cd = log(cd),
-    log_hg = log(hg),
-    log_pb = log(pb)
-  )
 
 data_mod_glm <- data_mod_glm %>% na.omit()
 
@@ -1270,14 +1267,75 @@ summary(data_mod_glm)
 
 
 Step 2. Exploratory Data Analysis (EDA)
+
+For logistic regression, the EDA should check the event rate to detect outcome imbalance, evaluate whether each predictor shows a monotonic change in outcome probability across its range, ensure each categorical predictor has adequate sample sizes in all categories, and consider log-transforming continuous predictors that are heavily skewed and may undermine stable estimation.
 ```{r}
+
+
+tab_y   <- table(data_mod_glm$cancer_ever, useNA = "ifany")
+prop_y  <- prop.table(tab_y)
+
+cbind( n = tab_y,prop = round(prop_y, 3))
+
+
+par(mfrow = c(2,3))
+for(v in c("cd","hg","pb","age","bmi")){
+  hist(data_mod_glm[[v]], main = v, xlab = v)
+}
+par(mfrow = c(1,1))
+
+
+table(data_mod_glm$ethnic,   useNA = "ifany")
+table(data_mod_glm$educ,     useNA = "ifany")
+table(data_mod_glm$smokstat, useNA = "ifany")
+
+
+by(
+  data_mod_glm$cancer_ever,
+  data_mod_glm$smokstat,
+  function(x) mean(x == "Cancer", na.rm = TRUE)
+)
+
+
+par(mfrow=c(2,3))
+for(v in c("age","bmi","cd","hg","pb")){
+  boxplot(data_mod_glm[[v]] ~ data_mod_glm$cancer_ever,
+          main=v, xlab="cancer_ever", ylab=v)
+}
+par(mfrow=c(1,1))
+
+cor(data_mod_glm[, c("cd","hg","pb")], use="pair")
+
+
+table(data_mod_glm$ethnic, data_mod_glm$cancer_ever)
+table(data_mod_glm$educ,   data_mod_glm$cancer_ever)
+table(data_mod_glm$smokstat, data_mod_glm$cancer_ever)
 
 ```
 
+The EDA showed that the data are suitable for logistic regression. Metal exposures were strongly right-skewed, so log transformation is appropriate. Age differed clearly between cancer and non-cancer groups and will be an important confounder, while BMI and metal levels showed only small differences. All categorical variables had enough observations in each outcome group, with no sparse cells or separation. There was no relevant collinearity among the metal exposures. Overall, the EDA revealed no problems, and the dataset is ready for modeling.
 
 
 Step 3. Specification of the Initial Full Model
 ```{r}
+
+data_mod_glm <- data_mod_glm %>%
+  mutate(
+    log_cd = log(cd + 1e-6),
+    log_hg = log(hg + 1e-6),
+    log_pb = log(pb + 1e-6)
+  )
+
+model_glm_full <- glm(
+  cancer_ever ~ age + male + ethnic + educ +
+    bmi + smokstat + alc_lft +
+    log_cd + log_hg + log_pb,
+  data   = data_mod_glm,
+  family = binomial
+)
+
+summary(model_glm_full)
+
 
 ```
 
@@ -1286,6 +1344,8 @@ Step 3. Specification of the Initial Full Model
 
 Step 4. Model Selection - AIC
 ```{r}
+fit_step <- step(model_glm_full, direction = "both")
+summary(fit_step)
 
 ```
 

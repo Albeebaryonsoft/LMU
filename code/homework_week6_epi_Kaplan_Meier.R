@@ -29,3 +29,19 @@ ggsurvplot(km_fit,
 
 #What is the survival probability at day 5?
 #The survival probability for man is at day 5 is 0.8, for women is 1. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

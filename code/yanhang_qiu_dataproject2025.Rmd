@@ -781,7 +781,7 @@ Step 3. Specification of the Initial Full Model
 Step 4. Model Selection - AIC
 Step 5. Assessment of Multicollinearity
 Step 6. Model Diagnostics and Assumption Checking
-Step 7. Predictive Performance Evaluation and Interpretation
+Step 7. Interpretation
 
 
 Step 0. candidate covariates
@@ -851,8 +851,6 @@ Categorical covariates were converted to factor variables to ensure correct mode
 
 Step 2. Exploratory Data Analysis (EDA)
 
-For linear regression, the EDA should check whether each continuous predictor shows an approximately linear relationship with the continuous outcome, examine correlations between predictors to detect multicollinearity, and identify major skewness or extreme outliers in each predictor variable that could distort estimation.
-
 ```{r}
 
 hist(data_mod_lm$hdl, main="HDL distribution", xlab="HDL")
@@ -877,9 +875,7 @@ cor_matrix
 summary(data_mod_lm[, c("age","bmi","rr_sys","hg","cd","sleep_dur")])
 
 ```
-
-
-HDL was unimodal with mild right-skewness and required no transformation. Continuous predictors showed plausible ranges and generally linear relationships with HDL. 
+Exploratory analyses were performed on the complete-case dataset to assess data quality and the suitability of linear regression. HDL was unimodal with mild right-skewness and required no transformation. Continuous predictors showed plausible ranges and generally linear relationships with HDL. 
 
 For hemoglobin and cadmium, concentrated low values with a few higher observations indicated right-skewness; therefore log-transformations (log-hg, log-cd) were applied to improve linearity and variance stability. 
 
@@ -899,15 +895,37 @@ data_mod_lm <- data_mod %>%
   ) %>%
   select(-cd, -hg)
 
-model <- lm(hdl ~ ., data = data_mod_lm)  
-summary(model)
+model_no_inter <- lm(hdl ~ ., data = data_mod_lm)  
+
+model_four_inter <- lm(
+  hdl ~ . +
+    male:bmi +                
+    male:cigsprd_prv30d +     
+    male:drnkprd_prv12mo +    
+    male:age,                 
+  data = data_mod_lm
+)
+
+model_one_inter<- lm(
+  hdl ~ . +
+    male:cigsprd_prv30d,
+  data = data_mod_lm
+)
+
+AIC(model_four_inter, model_one_inter, model_no_inter)
+anova(model_four_inter, model_one_inter, model_no_inter)
+
+model <- model_one_inter
 
 library(car)
 vif(model)
+summary(model)
 
 ```
 
-The full model explained about 26% of the variability in HDL. Significant predictors were sex, BMI, systolic blood pressure, cigarette consumption, and log_cd.Among categorical variables, only Black ethnicity differed significantly from the reference group.Education and income categories were not associated with HDL.All GVIF values were below 2, indicating no multicollinearity concerns.
+We compared three nested models: a no-interaction model, a model including only the pre-specified sex×smoking interaction, and a model including four sex-related interactions. Likelihood-ratio tests showed that adding the sex×smoking interaction significantly improved model fit compared with the no-interaction model (ANOVA p = 0.015), whereas adding the additional interaction terms (sex×BMI, sex×age, sex×alcohol) did not provide further improvement (p = 0.15). AIC values were consistent with these findings, with the one-interaction model showing the lowest AIC.
+
+This final model explained 23.92% of the variability in HDL. The sex×smoking interaction remained statistically significant, indicating a sex-specific association between smoking and HDL. BMI, systolic blood pressure, and log-cadmium were significant predictors, while only Black ethnicity differed from the reference group. Multicollinearity was minimal, with all GVIF values below 2, including the interaction term.
 
 We therefore proceeded with the full adjusted model for interpretation.
 
@@ -918,7 +936,7 @@ Step 4. Model Selection - AIC
 
 model_full <- lm(hdl ~ age + male + ethnic + educ + increl +
                    bmi + rr_sys +
-                   sleep_dur + drnkprd_prv12mo + cigsprd_prv30d + phq2 + log_cd + log_hg,
+                   sleep_dur + drnkprd_prv12mo + cigsprd_prv30d + phq2 + log_cd + log_hg + male:cigsprd_prv30d, 
                  data = data_mod_lm, na.action = na.omit)
 
 # model_step <- step(model_full, direction = "backward")
@@ -929,10 +947,8 @@ last_step_index <- tail(grep("^Step:", out), 1)
 final_block <- out[last_step_index:length(out)]
 cat(final_block, sep = "\n")
 
-
 ```
-
-Using backward AIC selection, the final model retained seven predictors—age, sex, ethnicity, BMI, systolic blood pressure, cigarette consumption, and log-transformed cadmium—yielding the minimum AIC (AIC=-1014.83).
+Using backward AIC selection, the final model retained age, sex, ethnicity, BMI, systolic blood pressure, recent cigarette consumption, and log-transformed cadmium, along with the sex×smoking interaction, yielding the lowest AIC (AIC = –1018.96).
 
 
 Step 5. Assessment of Multicollinearity
@@ -940,7 +956,7 @@ Step 5. Assessment of Multicollinearity
 
 library(car)
 
-model_final <- lm(hdl ~ age + male + ethnic + bmi + rr_sys + cigsprd_prv30d + log_cd,
+model_final <- lm(hdl ~ age + male + ethnic + bmi + rr_sys + cigsprd_prv30d + log_cd + male:cigsprd_prv30d,
                   data = data_mod_lm)
 
 vif(model_final)
@@ -972,128 +988,80 @@ plot(cook, pch=20, main="Cook's Distance")
 abline(h = 1, col="red")
 
 ```
+Overall, regression diagnostics showed no major violations of model assumptions, indicating that the final model provides a stable and reliable fit to the data.
 
-Diagnostic 1: Linearity （Residuals vs Fitted）
+Diagnostic 1: Linearity (Residuals vs Fitted)
+Residuals were generally centered around zero with no strong structural patterns. A mild curvature in the smoother line suggests minor nonlinearity, but not at a level that threatens model validity. The linearity assumption is therefore reasonably satisfied.
 
-Residuals are mostly randomly distributed around zero, with a slight curvature in the smoother line and mild spreading toward the right side. This indicates that the linearity assumption is generally satisfied.
-The slight curvature suggests minimal nonlinearity, but it is not severe enough to threaten model validity.
-
-
-Diagnostic 2: Normality of Residuals （Q-Q Residuals）
-
-
-Residuals follow the theoretical normal line closely in the center but deviate upward in the right tail due to a few high-valued observations.The central portion suggests approximate normality. Tail deviations indicate the presence of a few outliers, which is common in biomedical data.
+Diagnostic 2: Normality of Residuals (Q–Q Plot)
+Residuals aligned closely with the theoretical normal line in the central range, with expected deviations in the upper tail due to a few high-valued observations. Overall, residuals were approximately normally distributed.
 
 Diagnostic 3: Homoscedasticity (Scale–Location Plot)
-
-
-Most points are evenly scattered, with a slight increase in spread at higher fitted values. Residual variance is mostly constant, though mild heteroscedasticity may exist at the upper range of fitted values. Homoscedasticity is mostly satisfied
-
+Residual spread was mostly constant across fitted values, with only a slight increase at higher fitted levels. This indicates that heteroscedasticity is minimal and the homoscedasticity assumption is largely met.
 
 Diagnostic 4: Independence of Residuals (Durbin–Watson Test)
+The Durbin–Watson test showed no evidence of autocorrelation (p = 0.114), consistent with the cross-sectional nature of NHANES. Residual independence is therefore satisfied.
 
-The Durbin–Watson statistic indicated no evidence of autocorrelation (p=0.144 > 0.05), which is expected given the cross-sectional structure of the NHANES dataset.The independence assumption is therefore satisfied.
-
-
-Diagnostic 5: Outliers (Residuals vs Leverage, Cook’s Distance)
-
-Most observations have low leverage. A few points (e.g., ID 3872) show moderately high leverage, but none approach the Cook’s distance threshold.These high-leverage points do not exert disproportionate influence on the regression coefficients. Alos, all Cook’s D values are far below 1. No observation approaches the typical cutoff for concern. The model is stable and not driven by single influential observations.
+Diagnostic 5: Outliers and Influence (Residuals vs Leverage; Cook’s Distance)
+Most observations had low leverage, and although a few points showed moderately higher leverage, none exhibited concerning Cook’s distance values. All Cook’s D values were well below conventional thresholds, indicating that no single observation unduly influenced the model.
 
 
 
-
-
-Step 7. Predictive Performance Evaluation and Interpretation
-
-```{r}
-
-set.seed(123)
-
-n <- nrow(data_mod_lm)
-train_index <- sample(1:n, size = 0.8*n)
-
-train <- data_mod_lm[train_index, ]
-test  <- data_mod_lm[-train_index, ]
-
-pred_aic <- predict(model_final, newdata = test)
-mse_aic_full <- mean((pred_aic - test$hdl)^2)
-
-
-model_step_train <- lm(
-  hdl ~ age + male + ethnic + bmi + rr_sys + cigsprd_prv30d + log_cd,
-  data = train
-)
-
-
-pred_aic <- predict(model_step_train, newdata = test)
-mse_aic_train <- mean((pred_aic - test$hdl)^2)
-
-mse_aic_full
-mse_aic_train
-
-summary(model_step_train)
-
-```
-
-In our analysis, the mean squared error (MSE) obtained by applying the full-data model to the test set ( 0.137) was slightly lower than the MSE obtained using the training-only fitted model (0.145).
-
-This small difference is expected: because the full model was trained on the entire dataset—including observations that later appeared in the test set—it produces optimistically biased (overly favorable) predictions.
-
-Importantly, the two MSE values are very close, indicating that the training-only model performs similarly well on unseen data.
-
-This suggests that the final model does not exhibit overfitting and shows good generalizability to new observations.
-
+Step 7. Interpretation
 
 ```{r}
 summary(model_final)
 ```
 
-The final model for predicting HDL levels included the covariates age, sex, ethnicity, BMI, systolic blood pressure (rr_sys), recent cigarette consumption (cigsprd_prv30d), and log-transformed blood cadmium (log_cd).
+The final model for predicting HDL levels included age, sex, ethnicity, BMI, systolic blood pressure (rr_sys), recent cigarette consumption (cigsprd_prv30d), log-transformed blood cadmium (log_cd), and the sex×smoking interaction (male × cigsprd_prv30d).
 
 Adjusting for all other predictors:
 
+
 • Age
 
-Each additional year of age was associated with a 0.00193 mmol/L increase in HDL (β = 0.00193, p = 0.115).
+Each additional year of age was associated with a 0.00181 mmol/L increase in HDL (β = 0.00181, p = 0.137).
 The association was small and not statistically significant.
 
 • Sex
-
-Males had 0.153 mmol/L higher HDL compared with females (β = 0.15345, p < 0.001).
-This remained one of the strongest predictors in the model.
+Males had 0.2628 mmol/L higher HDL compared with females (β = 0.2628, p < 0.001).
+Sex remained a strong predictor of HDL.
 
 • Ethnicity
 
 Relative to the Hispanic reference group:
+White: +0.0783 mmol/L (p = 0.137)
+Black: +0.2237 mmol/L (p < 0.001)
+Other/Mixed: +0.1274 mmol/L (p = 0.064)
 
-White: +0.0839 mmol/L (p = 0.113)
-
-Black: +0.2303 mmol/L (p < 0.001)
-
-Other/Mixed: +0.1275 mmol/L (p = 0.0647)
-
-Black ethnicity showed a clear positive association with HDL; the other categories did not reach significance.
+Black ethnicity showed a significant positive association with HDL.
+The White and Other/Mixed groups did not reach significance.
 
 • BMI
 
-Each 1-unit increase in BMI was associated with a 0.0245 mmol/L decrease in HDL (β = –0.02445, p < 0.001).
-BMI was the strongest predictor, showing a robust inverse relationship.
+Each 1-unit increase in BMI was associated with a 0.02446 mmol/L decrease in HDL (β = –0.02446, p < 2×10⁻¹⁶).
+BMI was one of the strongest negative predictors.
 
 • Systolic Blood Pressure (rr_sys)
 
-A 1 mmHg increase in systolic blood pressure corresponded to a 0.00264 mmol/L increase in HDL (β = 0.00264, p = 0.011).
+A 1 mmHg increase in systolic blood pressure corresponded to a 0.00283 mmol/L increase in HDL (β = 0.00283, p = 0.0065).
 The effect was statistically significant but small.
 
 • Recent Cigarette Consumption (cigsprd_prv30d)
 
-Each additional cigarette consumed in the past 30 days was associated with a 0.00546 mmol/L decrease in HDL (β = –0.00546, p = 0.0067).
-This was a meaningful and statistically significant negative effect.
+Among females (male = 0), each additional cigarette consumed in the past 30 days was associated with a 0.00300 mmol/L decrease in HDL (β = –0.002998, p = 0.179).
+This main effect was not statistically significant.
 
 • Log-transformed cadmium (log_cd)
 
-A 1-unit increase in log_cd was associated with a 0.0507 mmol/L increase in HDL (β = 0.05073, p = 0.045).
-This association was statistically significant and improved model fit.
+A 1-unit increase in log_cd was associated with a 0.0550 mmol/L increase in HDL (β = 0.0550, p = 0.029).
+This association was significant and contributed to model fit.
 
+• Sex × Smoking Interaction (male × cigsprd_prv30d)
+
+The interaction term was significant (β = –0.00938, p = 0.014).
+Among females (male = 0), each additional cigarette consumed in the past 30 days was associated with a –0.0124 mmol/L reduction in HDL (–0.002998 + –0.009379) (p = 0.01437).
+This indicates that the negative effect of smoking on HDL is stronger in males than in females.
 
 
 7.Cancer
@@ -1168,6 +1136,7 @@ colnames(results) <- c("OR", "2.5%", "97.5%")
 
 round(results, 3)
 
+
 ```
 
 After adjusting for age categories, the association between workplace pollutant exposure and lifetime cancer diagnosis did not materially change. The adjusted odds ratio remained 1.11 (95% CI 0.87–1.42), almost identical to the unadjusted estimate, indicating no significant association. 
@@ -1187,7 +1156,7 @@ Step 3. Specification of the Initial Full Model
 Step 4. Model Selection - AIC
 Step 5. Assessment of Multicollinearity
 Step 6. Model Diagnostics and Assumption Checking
-Step 7. Predictive Performance Evaluation and Interpretation
+Step 7. Interpretation
 
 
 
@@ -1209,6 +1178,8 @@ vars_glm <- c(
   "hg",
   "pb",    
 
+  "srhgnrl",  
+  
   "cancer_ever"
 )
 
@@ -1217,17 +1188,13 @@ table(data_raw$cancer_ever)
 data_sub_glm <- data[, vars_glm]
 summary(data_sub_glm)
 
-
-
 ```
 
-Based on epidemiological relevance, data availability, and prior literature, we initially selected a set of demographic, socioeconomic, lifestyle, and biomarker variables—including age, sex, ethnicity, education, BMI, smoking, alcohol consumption, blood metal exposures (cadmium, mercury, lead), self-rated health, and cancer history—for further analysis.
+Based on epidemiological relevance, data availability, and prior literature, we initially selected a set of demographic, socioeconomic, lifestyle, and biomarker variables—including age, sex, ethnicity, education, BMI, smoking, alcohol consumption, blood metal exposures (cadmium, mercury, lead), self-rated health, HIV status, and cancer history—for further analysis.
 
 
 Step 1. Data Preparation
 ```{r}
-
-library(dplyr)     
 
 data_mod_glm <- data_sub_glm %>%
   mutate(
@@ -1241,8 +1208,11 @@ data_mod_glm <- data_sub_glm %>%
                     labels = c("Hispanic", "White", "Black", "Other/Mixed")),
 
     educ = factor(educ,
-                  levels = c(1,2,3,4,5),
-                  labels = c("edu1","edu2", "edu3", "edu4" ,"edu5")),
+                  levels = c(1, 2, 3, 4, 5)),
+
+    srhgnrl = factor(srhgnrl,
+                     levels = c(1, 2, 3, 4, 5),
+                     labels = c("Excellent", "Very good", "Good", "Fair", "Poor")),
 
     smokstat = factor(smokstat,
                       levels = c(1, 2, 3),
@@ -1257,6 +1227,12 @@ data_mod_glm <- data_sub_glm %>%
                          labels = c("No cancer", "Cancer"))
   )  
 
+data_mod_glm <- data_mod_glm %>%
+  mutate(
+    log_cd = log(cd),
+    log_hg = log(hg),
+    log_pb = log(pb)
+  )
 
 data_mod_glm <- data_mod_glm %>% na.omit()
 
@@ -1266,75 +1242,14 @@ summary(data_mod_glm)
 
 
 Step 2. Exploratory Data Analysis (EDA)
-
-For logistic regression, the EDA should check the event rate to detect outcome imbalance, evaluate whether each predictor shows a monotonic change in outcome probability across its range, ensure each categorical predictor has adequate sample sizes in all categories, and consider log-transforming continuous predictors that are heavily skewed and may undermine stable estimation.
 ```{r}
-
-
-tab_y   <- table(data_mod_glm$cancer_ever, useNA = "ifany")
-prop_y  <- prop.table(tab_y)
-
-cbind( n = tab_y,prop = round(prop_y, 3))
-
-
-par(mfrow = c(2,3))
-for(v in c("cd","hg","pb","age","bmi")){
-  hist(data_mod_glm[[v]], main = v, xlab = v)
-}
-par(mfrow = c(1,1))
-
-
-table(data_mod_glm$ethnic,   useNA = "ifany")
-table(data_mod_glm$educ,     useNA = "ifany")
-table(data_mod_glm$smokstat, useNA = "ifany")
-
-
-by(
-  data_mod_glm$cancer_ever,
-  data_mod_glm$smokstat,
-  function(x) mean(x == "Cancer", na.rm = TRUE)
-)
-
-
-par(mfrow=c(2,3))
-for(v in c("age","bmi","cd","hg","pb")){
-  boxplot(data_mod_glm[[v]] ~ data_mod_glm$cancer_ever,
-          main=v, xlab="cancer_ever", ylab=v)
-}
-par(mfrow=c(1,1))
-
-cor(data_mod_glm[, c("cd","hg","pb")], use="pair")
-
-
-table(data_mod_glm$ethnic, data_mod_glm$cancer_ever)
-table(data_mod_glm$educ,   data_mod_glm$cancer_ever)
-table(data_mod_glm$smokstat, data_mod_glm$cancer_ever)
 
 ```
 
-The EDA showed that the data are suitable for logistic regression. Metal exposures were strongly right-skewed, so log transformation is appropriate. Age differed clearly between cancer and non-cancer groups and will be an important confounder, while BMI and metal levels showed only small differences. All categorical variables had enough observations in each outcome group, with no sparse cells or separation. There was no relevant collinearity among the metal exposures. Overall, the EDA revealed no problems, and the dataset is ready for modeling.
 
 
 Step 3. Specification of the Initial Full Model
 ```{r}
-
-data_mod_glm <- data_mod_glm %>%
-  mutate(
-    log_cd = log(cd + 1e-6),
-    log_hg = log(hg + 1e-6),
-    log_pb = log(pb + 1e-6)
-  )
-
-model_glm_full <- glm(
-  cancer_ever ~ age + male + ethnic + educ +
-    bmi + smokstat + alc_lft +
-    log_cd + log_hg + log_pb,
-  data   = data_mod_glm,
-  family = binomial
-)
-
-summary(model_glm_full)
-
 
 ```
 
@@ -1343,8 +1258,6 @@ summary(model_glm_full)
 
 Step 4. Model Selection - AIC
 ```{r}
-fit_step <- step(model_glm_full, direction = "both")
-summary(fit_step)
 
 ```
 

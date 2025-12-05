@@ -1,0 +1,1110 @@
+---
+title: 'R Data Project: NHANES Study Analysis'
+author: "Yanhang Qiu"
+date: "2025-12-15"
+output:
+  pdf_document: 
+    toc: true         # Enable Table of Contents
+    toc_depth: 2      # Levels 1 and 2 headers will be included in the TOC
+    number_sections: true  # Number the sections in the document
+  html_document: default
+fontsize: 9pt
+mainfont: "Times New Roman"  # Set the main font if needed
+---
+
+# 1 About the NHANES study
+
+Familiarize yourself with the NHANES study design and the variables in the dataset by reading the sections "About the NHANES study" and "The data set" of this document. Use the information provided to answer the following questions:
+
+## 1.1 What are important characteristics of the NHANES study (study design, target population, study objectives, study period, ...)?
+
+-   **Study design**: cross-sectional study
+-   **Target population**: resident non-institutionalized US population (adults and children)
+-   **Study objectives**: to determine the prevalence of major diseases and risk factors, to design health promotion campaigns, and to establish national reference values (e.g. for height, weight, blood pressure).
+-   **Study period**: This is an ongoing study with data released in biannual cycles.
+-   **Sampling methods**: A four-stage stratified probability cluster sample.
+
+## 1.2 What general categories (such as "demographics", "lab results") can the variables in the dataset be sorted into?
+
+The variables in the dataset can be categorized into groups such as demographic data, examination data, dietary data, lifestyles, disease, family history, selfrated_health, depression, environment and toxic,
+
+```{r 1.2, message=FALSE, warning=FALSE}
+
+data <- read.csv2("../data/NHANES1.csv",row.names = 1)
+data_raw <- data
+
+library(dplyr)
+
+categories <- list(
+  demographic = c("seqn","age","educ","martlst","male","ethnic","increl","age.cat","age_bin"),
+  examination  = c("weight","height","bmi","rr_sys","rr_dia","bmi_cat","hdl","logHdl"),
+  dietary = c("rdyfood_prvmo","frzfood_prvmo","milk_month"),
+  lifestyle =c("alc_lft", "drnkprd_prv12mo", "cigsprd_prv30d", "sleep_dur", "sleep_probl", "hrsworked_prvwk", "wrkt_irreg", "workpollut","smokstat","smoke_bin","cannab_ever","harddrg_ever","jobstat_lwk"),
+  disease =c("heartdis_ever","diab_lft", "livdis_ever", "arthrit_ever", "stroke_ever", "cancer_ever", "cbronch_now", "lungpath_ever","asthma_ever","asthma_now","ovrwght_ever","livdis_now","hivpos"),
+  fam_history =c("rel_heartdis", "rel_diab", "rel_asthma"),
+  selfrated_health = c("srhgnrl", "srphbad_prv30d", "srmhbad_prv30d", "adlimp_prv30d"),
+  depression =c ("phq1", "phq2", "phq3", "phq4", "phq5", "phq6", "phq7", "phq8","phq9"),
+  envir_and_toxic = c("cd", "pb", "hg")
+)
+
+categories$uncategorised_var <- setdiff(names(data), unlist(categories))
+
+cat_df <- stack(categories)
+names(cat_df) <- c("variable", "category")
+
+category_overview <- cat_df %>%
+  group_by(category) %>%
+  summarise(
+    variables   = paste(variable, collapse = ", "),
+    n_variables = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(category = factor(category, levels = names(categories))) %>%
+  arrange(category)
+
+
+# present categories using table 
+install.packages("kableExtra")
+library(kableExtra)
+knitr::kable(
+  category_overview,
+  caption = "Overview of Variable Categories",
+  booktabs = TRUE,
+  linesep = ""
+) %>%
+  kableExtra::kable_styling(full_width = FALSE)
+
+
+```
+
+# 2 Age, Marital Status and Self-Rated Health
+
+## 2.1 Using the subsample you have chosen, describe the US population with regards to demographic characteristics. How can the strange age distribution be explained?
+
+To deal with this problem, the age variable are recoded into the following categories: 18-34, 35-49, 50-64, 65-79, 80 or higher.
+
+```{r 2.1 continuous age distribution, message=FALSE, warning=FALSE}
+
+library(ggplot2) 
+
+plot_age <- ggplot(data, aes(x = age)) +
+  geom_histogram(fill = "pink", color = "white",bins = 30) +
+  labs(title = "age",x = "Age",y = "Count") +
+  theme_minimal()
+
+plot_age
+
+```
+
+The age distribution in the sample shows limited representativeness of the U.S. population, displaying an approximately uniform count across all age intervals. Despite the complex four-stage sampling design, potential biases may still arise — for example, due to substantial differences in age composition across districts, or because older participants tend to be less willing to respond compared to younger individuals.
+
+```{r 2.1 categorial age distribution, message=FALSE, warning=FALSE}
+library(dplyr)
+data <- data %>%
+  mutate(
+    age_group = case_when(
+      age < 18 ~ "0-17",
+      age >= 18 & age < 35 ~ "18-34",
+      age >= 35 & age < 50 ~ "35-49",
+      age >= 50 & age < 65 ~ "50-64",
+      age >= 65 & age < 80 ~ "65-79",
+      age >= 80 ~ "80+"
+    )
+  )
+
+plot_age_cate <-ggplot(data, aes(x=factor(age_group))) + geom_bar(fill = "#BFD7EA") + 
+  labs(title = "age_group", x = "Age Group", y = "Count") +
+  theme_minimal()
+
+plot_age_cate
+```
+
+By grouping participants into age categories, we can reweight each group so that the overall age distribution in the sample better reflects that of the U.S. population.
+
+## 2.2 When asked about Marital status, some of the participants refused to answer while some didn't know which category they belonged. Hence they were coded differently. Take that into account and recode the variable martlst.
+
+```{r 2.2 marital status, message=FALSE, warning=FALSE}
+
+data <- data %>%
+  mutate(
+    martlst_clean = na_if(martlst, 77),
+    martlst_clean = na_if(martlst_clean, 99)
+  )
+
+before_after <- list(
+  "Before recode (martlst)" = table(data$martlst, useNA = "ifany"),
+  "After recode (martlst_clean)" = table(data$martlst_clean, useNA = "ifany")
+)
+
+before_after
+
+```
+
+## 2.3 Self-rated health. Looking at the results of your descriptive analysis, what do you have to consider when interpreting the results?
+
+```{r 2.3 self-rated health, message=FALSE, warning=FALSE}
+
+data <- data %>%
+  mutate(
+    srhgnrl_f = factor(
+      srhgnrl,
+      levels = 1:5,
+      labels = c("Excellent", "Very good", "Good", "Fair", "Poor"),
+      ordered = TRUE
+    )
+  )
+
+library(dplyr)
+
+tab_srh <- data %>%
+  count(srhgnrl_f, name = "n") %>%
+  mutate(
+    prop = n / sum(n)
+  )
+tab_srh
+
+
+library(ggplot2)
+library(scales)
+
+
+p1 <- data %>%
+  filter(!is.na(srhgnrl_f)) %>%
+  ggplot(aes(x = srhgnrl_f, group = 1)) +
+  geom_bar(aes(y = after_stat(prop)), fill = "#F6BD60") +
+  scale_y_continuous(labels = percent_format()) +
+  labs(
+    title = "Self-rated health in general",
+    x = "Self-rated health category",
+    y = "Proportion"
+  )
+
+p1
+
+
+
+
+```
+
+When interpreting the self-rated health distribution, it is important to note that the scale is ordinal and prone to central-tendency responses.**Most importantly, missing values must be considered**, as excluding or including them can influence the perceived distribution and may introduce bias if the missingness is not random.
+
+To assess whether missingness in the self-rated health variable was randomly distributed across participant characteristics, we conducted chi-square tests comparing the proportion of missing responses across key demographic and socioeconomic groups.
+
+```{r 2.3 missing value, message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(broom)
+
+vars <- c("male", "age_group", "increl")
+
+chisq_summary <- lapply(vars, function(v) {
+  tbl <- table(self_health[[v]], self_health$missing_self)
+  broom::tidy(chisq.test(tbl)) %>%
+    mutate(variable = v)
+}) %>% 
+  bind_rows() %>%
+  select(variable, statistic, parameter, p.value)
+
+chisq_summary
+
+
+```
+
+Chi-square tests showed that missingness in the self-rated health variable was not random, but significantly related to sex (χ² = 13.52, p \< 0.001), age group (χ² = 40.49, p \< 0.001), and family income (χ² = 23.96, p \< 0.001). Men, older participants, and those with lower income were more likely to have missing values. This indicates that the missing-data mechanism is unlikely to be MCAR, and complete-case analyses may bias the results.
+
+# 3 Diabetes and Ethnicity
+
+## 3.1 How is the diabetes status distributed in your data set? Summarize the 2 diabetes groups in a single group and recode the variable for diabetes status into two groups: non-diabetes and diabetes. Give an interval estimate for diabetes in your dataset.
+
+```{r 3.1 diabetes recode, message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(binom)
+
+data <- data %>%
+  mutate(
+    diabetes_status = case_when(
+      diab_lft == 1 ~ "non_diabetes",
+      diab_lft %in% c(2, 3) ~ "diabetes",
+      TRUE ~ NA_character_
+    ),
+    diabetes_status = factor(diabetes_status,
+                             levels = c("non_diabetes", "diabetes"))
+  )
+
+tab_raw    <- table(data$diab_lft)
+perc_raw   <- round(tab_raw / sum(tab_raw) * 100, 1)
+tab_recode  <- table(data$diabetes_status)
+perc_recode <- round(tab_recode / sum(tab_recode) * 100, 1)
+
+par(mfrow = c(1, 2), mar = c(6, 4, 4, 1))
+
+
+label_map <- c(
+  "1" = "None",
+  "2" = "Prediabetes",
+  "3" = "Diabetes"
+)
+
+bp1 <- barplot(
+  tab_raw,
+  col = c("#BFD7EA", "#A8DADC", "#F6BD60"),
+  ylim = c(0, max(tab_raw) * 1.25),
+  main = "Original Variable (diab_lft)",
+  ylab = "Count",
+  names.arg = label_map[names(tab_raw)],
+  las = 2
+)
+
+text(
+  bp1, tab_raw,
+  labels = paste0(tab_raw, "\n(", perc_raw, "%)"),
+  pos = 3, cex = 0.8
+)
+
+names(tab_recode) <- c("Non-diabetes", "Diabetes")
+
+bp2 <- barplot(
+  tab_recode,
+  col = c("#BFD7EA", "#F6BD60"),
+  ylim = c(0, max(tab_recode) * 1.25),
+  main = "Diabetes Status",
+  ylab = "Count",
+  names.arg = names(tab_recode),
+  las = 2
+)
+
+text(
+  bp2, tab_recode,
+  labels = paste0(tab_recode, "\n(", perc_recode, "%)"),
+  pos = 3, cex = 0.8
+)
+
+par(mfrow = c(1, 1))
+
+# Wilson CI
+x <- sum(data$diabetes_status == "diabetes", na.rm = TRUE)
+n <- sum(!is.na(data$diabetes_status))
+
+CI_Wilson <- binom.confint(x, n, conf.level = 0.95, methods = "wilson")
+
+ci_table <- CI_Wilson %>%
+  transmute(
+    estimate_percent = round(mean * 100, 1),
+    lower_95 = round(lower * 100, 1),
+    upper_95 = round(upper * 100, 1)
+  )
+
+ci_table
+```
+
+After recoding diabetes status into two groups (“diabetes” vs. “non-diabetes”), 4,692 participants had valid data. Among them, 602 individuals (12.8%) had diabetes and 4,090 (87.2%) did not, showing that diabetes is relatively uncommon in this sample.
+
+The estimated diabetes prevalence is 12.8%, with a 95% confidence interval of roughly 11.9%–13.8% using both the Wilson and Clopper–Pearson methods. This interval reflects the range in which the true population proportion would lie in repeated samples.
+
+## 3.2 Work with the recoded variable. Use an appropriate statistical test to test the relation between diabetes status and ethnicity. Interpret the results of the test.
+
+```{r 3.2 diabetes status and ethnicity, message=FALSE, warning=FALSE}
+
+data$diabetes_status <- factor(data$diabetes_status)
+data$ethnic <- factor(data$ethnic)
+tab <- table(data$diabetes_status, data$ethnic)
+tab
+chisq.test(tab)
+
+```
+
+As diabetes_status is binomial variable and ethnicity is a nominal variable, we use chi-square test to exam their relationship. Results show that there is significant association (p = 7.296e-08 \<0.05) between diabetes status and ethinicty.
+
+```{r 3.2 missing value, message=FALSE, warning=FALSE}
+
+
+library(dplyr)
+
+data <- data %>%
+  mutate(
+    diabetes_missing = ifelse(is.na(diabetes_status), "Missing", "Observed"),
+    ethnic = factor(ethnic)
+  )
+
+
+tab_miss <- table(data$diabetes_missing, data$ethnic)
+tab_miss
+
+chisq.test(tab_miss)
+
+```
+
+The chi-square test examining the association between diabetes status missingness and ethnicity yielded a non-significant result (χ²(3) = 1.05, p = 0.79). Therefore, the missing data on diabetes status are likely to be missing at random with respect to ethnicity, and excluding these missing cases from the analysis is unlikely to bias the estimated association between diabetes status and ethnicity.
+
+# 4 Weekly working hours and self-evaluated health status
+
+## 4.1 The variable `hrsworked_prvwk` codes the number of weekly working hours. 77777 or 99999 are missing values. Recode these missing values with a proper value, e.g. NA.
+
+```{r 4.1 recode working hours, message=FALSE, warning=FALSE}
+
+data <- data %>%
+  mutate(
+    hrsworked_prvwk_clean = na_if(hrsworked_prvwk, 77777),
+    hrsworked_prvwk_clean = na_if(hrsworked_prvwk_clean, 99999)
+  )
+```
+
+## 4.2 Recode the variable `hrsworked_prvwk` into categories [,40), [40,) weekly working hours. Number or name the categories properly. (Hint: Set the new variable as a factor variable, if necessary)
+
+```{r  4.2 categorise working hours, message=FALSE, warning=FALSE}
+
+library(dplyr)
+
+data <- data %>%
+  mutate(
+    hrsworked_prvwk_cat = case_when(
+      is.na(hrsworked_prvwk_clean) ~ NA_character_,   
+      hrsworked_prvwk_clean < 40 ~ "< 40",
+      hrsworked_prvwk_clean >= 40 ~ ">= 40"
+    )
+  )
+
+table(data$hrsworked_prvwk_cat,useNA = "ifany")
+
+
+```
+
+## 4.3 Plot weekly working hours against self-evaluated health status using mosaic plot. Looking at the plot, what would you tell about the relation between these two variables.
+
+```{r 4.3 mosaic plot, message=FALSE, warning=FALSE }
+
+mosaicplot(table(data$srhgnrl, data$hrsworked_prvwk_cat), color = TRUE, main = "Mosaic plot: self-rated health vs weekly working hours") 
+
+```
+
+According to the mosaic plot, the distribution of self-rated health levels is similar across the two working-hour groups (\< 40 vs. ≥ 40 hours).
+
+##4.4 Use an appropriate statistical test to test for the statistical significance of this relation. Interpret the results of the test.
+
+```{r 4.4 chi test, message=FALSE, warning=FALSE }
+
+d <- subset(data, !is.na(srhgnrl) & !is.na(hrsworked_prvwk_cat))
+tab1 <- table(d$srhgnrl, d$hrsworked_prvwk_cat)
+chisq.test(tab1)
+
+```
+
+he chi-square test indicated no statistically significant association between weekly working-hour categories and self-rated health (χ² = 3.25, df = 4, p = 0.517). This aligns with the mosaic plot, which also showed very similar health distributions across the two working-hour groups.
+
+# 5 Blood mercury level (umol/L) and gender
+
+## 5.1 Describe and plot the distribution of blood mercury level in men and women.
+
+```{r 5.1 blood mercury level, message=FALSE, warning=FALSE  }
+
+hg_by_male <- data %>%
+  group_by(male) %>%
+  summarise(
+    mean_hg = mean(hg, na.rm = TRUE),
+    sd_hg   = sd(hg, na.rm = TRUE),
+    min_hg  = min(hg, na.rm = TRUE),
+    max_hg  = max(hg, na.rm = TRUE),
+    p25_hg  = quantile(hg, 0.25, na.rm = TRUE),
+    p50_hg = median(hg, na.rm = TRUE),
+    p75_hg  = quantile(hg, 0.75, na.rm = TRUE),
+    n       = sum(!is.na(hg)),
+    n_missing = sum(is.na(hg)),
+  )
+
+hg_by_male %>%
+  mutate(across(where(is.numeric), ~ round(.x, 2)))
+par(mfrow = c(1, 2))  
+
+
+hist(data$hg[data$male == 1],
+     main = "Hemoglobin: Male",
+     xlab = "hg",
+     col = "skyblue",
+     breaks = 80)
+
+
+hist(data$hg[data$male == 0],
+     main = "Hemoglobin: Female",
+     xlab = "hg",
+     col = "pink",
+     breaks = 80)
+
+```
+
+Blood mercury levels showed a highly right-skewed distribution in both men and women, with very similar patterns across the two groups. Most values were clustered at the lower end, while a number of extreme high measurements created a long tail, making the raw distribution difficult to interpret. Therefore, we categorized blood mercury into clinically meaningful exposure groups to improve interpretability and facilitate clearer visualization.
+
+```{r 5.1 blood murcury classification, message=FALSE, warning=FALSE}
+
+library(dplyr)
+
+data <- data %>%
+  mutate(
+    hg_risk_group = case_when(
+      hg < 5      ~ "<5 µg/L (Background)",
+      hg < 15     ~ "5–15 µg/L (Mild elevation)",
+      hg < 50     ~ "15–50 µg/L (Moderate elevation)",
+      hg < 100    ~ "50–100 µg/L (High exposure)",
+      hg >= 100   ~ "≥100 µg/L (Potential toxicity)",
+      TRUE        ~ NA_character_
+    ),
+    hg_risk_group = factor(
+      hg_risk_group,
+      levels = c(
+        "<5 µg/L (Background)",
+        "5–15 µg/L (Mild elevation)",
+        "15–50 µg/L (Moderate elevation)",
+        "50–100 µg/L (High exposure)",
+        "≥100 µg/L (Potential toxicity)"
+      ),
+      ordered = TRUE
+    )
+  )
+
+
+risk_summary <- data %>%
+  mutate(group = ifelse(is.na(hg_risk_group), "Missing", as.character(hg_risk_group))) %>%
+  count(group) %>%
+  mutate(
+    pct_total = round(n / nrow(data) * 100, 1),
+    pct_valid = round(ifelse(group == "Missing", NA, n / sum(!is.na(data$hg_risk_group)) * 100), 1)
+  ) %>%
+  arrange(match(group, c(levels(data$hg_risk_group), "Missing")))
+
+risk_summary
+
+
+
+```
+
+The majority of participants (approximately 55.8%) fall within the background exposure range (\<5 µg/L). Notably, 72 individuals (approximately 1.7%) exhibited blood mercury concentrations exceeding 50 µg/L, placing them in the high-exposure or potentially toxic risk category.
+
+## 5.2 Use both parametric and non-parametric statistical tests to test for the statistical significance the relation between blood mercury level and gender. Interpret the results of the tests.
+
+Normality tests and visual inspection showed that blood mercury levels were strongly right-skewed in both men and women. However, given the large sample size, the t-test remains acceptable despite the deviation from normality. The F-test indicated unequal variances between groups; therefore, Welch’s t-test is appropriate. Alternatively, the non-parametric Mann–Whitney test can also be used.
+
+```{r 5.2 para and non-pare test, message=FALSE, warning=FALSE}
+
+shapiro.test(data$hg[data$male == 1])
+shapiro.test(data$hg[data$male == 0])
+
+library(e1071)
+skewness(data$hg[data$male == 1], na.rm = TRUE)
+skewness(data$hg[data$male == 0], na.rm = TRUE)
+
+
+var.test(hg ~ male, data = data)
+
+t.test(hg ~ male, data = data, var.equal = FALSE,conf.level = 0.99)
+wilcox.test(hg ~ male, data = data, conf.level = 0.99,conf.int = TRUE) 
+
+
+
+sum(is.na(data$hg))
+
+```
+
+Results from both Welch’s t-test (testing mean differences) and the Mann–Whitney U test (testing distributional differences) are consistent in showing no statistically significant difference between the two groups at the 95% confidence level.
+
+Therefore, there is no statistically significant difference in blood mercury levels between men and women.
+
+# 6 BMI and HDL
+
+## 6.1 How strong is the relationship between BMI and HDL (the "good" cholesterol)? Is it significant? How much of the variation in HDL can be explained (in a statistical sense) by variation in BMI?
+
+```{r 6.1 pearson and spearman correlation, message=FALSE, warning=FALSE}
+
+plot(data$bmi, data$hdl,
+     xlab = "BMI", ylab = "HDL",
+     main = "Scatterplot of BMI vs HDL")
+abline(lm(hdl ~ bmi, data = data), col = "red")
+
+boxplot(data$hdl)
+boxplot(data$bmi)
+
+
+cor(data$hdl, data$bmi,use="complete.obs")
+cor.test(data$hdl, data$bmi)
+
+cor(data$hdl, data$bmi, method = "spearman",use="complete.obs")
+cor.test(data$hdl, data$bmi, method = "spearman")
+
+
+model <- lm(hdl ~ bmi, data = data)
+summary(model)
+
+
+```
+
+The scatterplot shows that HDL generally decreases as BMI increases, but the points are widely dispersed, indicating that the linear trend is present but weak. The boxplots also reveal several outliers. To obtain more robust and stable results, both Pearson’s r and Spearman’s ρ were therefore examined.
+
+The Pearson correlation between BMI and HDL was –0.28 (95% CI: –0.31 to –0.25), indicating a weak negative linear association. The relationship was highly statistically significant (t = –19.1, df = 4364, p \< 2.2×10⁻¹⁶). In addition, the Spearman rank correlation was –0.33 (p \< 2.2e-16), suggesting a slightly stronger monotonic decreasing pattern. Together, both measures support a statistically significant but relatively weak negative association between BMI and HDL.
+
+The simple linear regression yielded an R² of 0.077, meaning that approximately 7.7% of the variation in HDL levels can be statistically attributed to variation in BMI. This indicates that BMI alone has limited explanatory power, and most of the variation in HDL must be explained by other factors.
+
+## 6.2 Does the relationship between HDL and BMI change when you adjust for age (categorized)? Interpret the coefficients of the resulting model (when you mean-center BMI before fitting the model, you can also interpret the intercept). Would you say that BMI has a clinically relevant impact on HDL, according to your model?
+
+```{r 6.2 MLR, message=FALSE, warning=FALSE}
+
+model_controlled <- lm(hdl ~ bmi + age, data = data)
+summary(model_controlled)
+
+
+data$bmi_c <- data$bmi - mean(data$bmi, na.rm = TRUE)
+data$age_c <- data$age - mean(data$age, na.rm = TRUE)
+model_controlled <- lm(hdl ~ bmi_c + age_c, data = data)
+summary(model_controlled)
+
+```
+
+After adding age as a control variable, BMI remained a statistically significant negative predictor of HDL (β = –0.016, p \< 2e–16). Its coefficient became slightly more negative, suggesting that controlling for age reduced confounding and revealed a more robust independent association between BMI and HDL. Model fit improved modestly: The adjusted R-squared increased from 0.0770 to 0.0857, indicating a genuine though limited improvement in explanatory power.
+
+After mean-centering BMI and age, the intercept became interpretable: the centered model yielded an intercept of 1.355, representing the expected HDL level for an individual with average BMI and average age.
+
+Although BMI showed strong statistical significance, the magnitude of its effect was small. Each one-unit increase in BMI was associated with only a 0.016 mmol/L decrease in HDL, meaning that even a 10-unit difference in BMI would change HDL by only \~0.16 mmol/L—well within the typical biological variability of HDL (often ±0.3–0.5 mmol/L). Thus, while the association is statistically robust, its clinical relevance appears limited in this dataset.
+
+## 6.3 Try to find a better model to predict HDL by including more covariates.
+
+Select a number of candidate covariates which in your opinion may be related to HDL, and then choose a model selection strategy and a criterion/test for comparing models. Describe the model with the best fit according to your search, and interpret the model coefficients.
+
+This modeling process includes 8 steps:
+
+### Step 1. Candidate covariates
+
+A set of 13 candidate variables was selected based on previous epidemiological evidence, biological plausibility:
+
+```{r 6.3 Candidate covariates}
+
+vars_lm <- c("age","male", "ethnic", "educ", "increl", "bmi", "rr_sys", "hg", "cd", "sleep_dur", "drnkprd_prv12mo", "cigsprd_prv30d", "phq2", "hdl"
+)
+
+```
+
+### Step 2. Data Preparation
+
+```{r 6.3 Data Preparation }
+
+library(dplyr)
+
+data_sub_lm <- data[ , vars_lm]
+data_sub_lm <- data_sub_lm %>%
+  mutate(
+    male = factor(male,
+                  levels = c(FALSE, TRUE),
+                  labels = c("Female", "Male")),
+    
+    ethnic = factor(ethnic,
+                    levels = 1:4,
+                    labels = c("Hispanic","White","Black","Other/Mixed")),
+    
+    educ  = factor(educ, levels = 1:5),
+    
+    increl = factor(increl),
+    
+    sleep_dur = ifelse(sleep_dur >= 90, NA, sleep_dur)
+  )
+
+
+data_mod_lm <- na.omit(data_sub_lm)
+
+nrow(data_mod_lm)
+summary(data_mod_lm)
+
+```
+
+After omitting samples with NA, 525 remain in the dataset.
+
+### Step 3. Exploratory Data Analysis (EDA)
+
+```{r 6.3 Exploratory Data Analysis}
+
+hist(data_mod_lm$hdl, main="HDL distribution", xlab="HDL")
+boxplot(data_mod_lm$hdl, main="Boxplot of HDL")
+summary(data_mod_lm$hdl)
+
+par(mfrow=c(2,3))
+plot(data_mod_lm$age, data_mod_lm$hdl, main="HDL vs age")
+plot(data_mod_lm$bmi, data_mod_lm$hdl, main="HDL vs BMI")
+plot(data_mod_lm$rr_sys, data_mod_lm$hdl, main="HDL vs SBP")
+plot(data_mod_lm$hg, data_mod_lm$hdl, main="HDL vs hg")
+plot(data_mod_lm$cd, data_mod_lm$hdl, main="HDL vs cd")
+
+par(mfrow=c(1,3))
+boxplot(hdl ~ male, data=data_mod_lm, main="HDL by sex")
+boxplot(hdl ~ ethnic, data=data_mod_lm, main="HDL by ethnic group")
+boxplot(hdl ~ educ, data=data_mod_lm, main="HDL by education")
+
+cor_matrix <- cor(data_mod_lm[, c("age","bmi","rr_sys","hg","cd")])
+cor_matrix
+
+summary(data_mod_lm[, c("age","bmi","rr_sys","hg","cd","sleep_dur")])
+
+```
+
+Exploratory analyses were performed on the complete-case dataset to assess data quality and the suitability of linear regression.
+
+-   HDL was unimodal with mild right-skewness and required no transformation.
+-   Continuous predictors such as age, bmi, sbp showed plausible ranges and generally linear relationships with HDL.
+-   For hemoglobin and cadmium, concentrated low values with a few higher observations indicated right-skewness; therefore log-transformations (log-hg, log-cd) were applied to improve linearity and variance stability.
+-   Categorical predictors including sex, ethnicity and education displayed clear group differences.
+-   Correlations among continuous variables were modest (all \|r\|\< 0.4), and no influential outlines remained after cleaning. Overall, the data supported proceeding with a standard multiple linear regression model.
+
+### Step 4. Specification of the Initial Full Model
+
+```{r 6.3 Specification of the Initial Full Model }
+
+library(dplyr)
+
+data_mod_lm <- data_mod_lm %>%
+  mutate(
+    log_cd = log(cd),
+    log_hg = log(hg)
+  ) %>%
+  dplyr::select(-cd, -hg)
+
+
+model_no_inter <- lm(hdl ~ ., data = data_mod_lm)  
+
+model_four_inter <- lm(
+  hdl ~ . +
+    male:bmi +                
+    male:cigsprd_prv30d +     
+    male:drnkprd_prv12mo +    
+    male:age,                 
+  data = data_mod_lm
+)
+
+model_one_inter<- lm(
+  hdl ~ . +
+    male:cigsprd_prv30d,
+  data = data_mod_lm
+)
+
+AIC(model_four_inter, model_one_inter, model_no_inter)
+anova(model_four_inter, model_one_inter, model_no_inter)
+
+library(car)
+vif(model_one_inter)
+summary(model_one_inter)
+
+```
+
+We compared three nested models: a no-interaction model, a model including only the pre-specified sex × smoking interaction, and a model including four sex-related interactions. Likelihood-ratio tests showed that adding the sex×smoking interaction significantly improved model fit compared with the no-interaction model (ANOVA p = 0.015), whereas adding the additional interaction terms (sex×BMI, sex×age, sex×alcohol) did not provide further improvement (p = 0.15). AIC values were consistent with these findings, with the one-interaction model showing the lowest AIC.
+
+This final model explained 23.92% of the variability in HDL. The sex×smoking interaction remained statistically significant, indicating a sex-specific association between smoking and HDL. BMI, systolic blood pressure, and log-cadmium were significant predictors, while only Black ethnicity differed from the reference group. Multicollinearity was minimal, with all GVIF values below 2, including the interaction term.
+
+We therefore proceeded with the full adjusted model for interpretation.
+
+### Step 5. Model Selection - AIC
+
+```{r 6.3 Model Selection - AIC }
+
+library(MASS)
+
+model_full <- lm(
+  hdl ~ age + male + ethnic + educ + increl +
+    bmi + rr_sys +
+    sleep_dur + drnkprd_prv12mo + cigsprd_prv30d + phq2 +
+    log_cd + log_hg + male:cigsprd_prv30d,
+  data = data_mod_lm,
+  na.action = na.omit
+)
+
+out <- capture.output(
+  model_final_lm <- stepAIC(
+    model_full,
+    direction = "backward",
+    trace = TRUE
+  )
+)
+
+last_step_index <- tail(grep("^Step", out), 1)
+
+final_block <- out[last_step_index:length(out)]
+cat(final_block, sep = "\n")
+
+
+summary(model_final_lm)
+
+
+```
+
+Using backward AIC selection, the final model retained age, sex, ethnicity, BMI, systolic blood pressure, recent cigarette consumption, and log-transformed cadmium, along with the sex × smoking interaction, yielding the lowest AIC (AIC = -1018.96).
+
+### Step 6. Assessment of Multicollinearity
+
+```{r 6.3 Assessment of Multicollinearity }
+
+library(car)
+vif(model_final_lm)
+
+```
+
+After computing the adjusted GVIF for each predictor, all values were well below commonly used thresholds (GVIF\^(1/(2\*df)) \< 2-5), indicating that multicollinearity is not a concern in this model.
+
+### Step 7. Model Diagnostics and Assumption Checking
+
+The following diagnostics ensure that the linear model is valid, unbiased, and reliable:
+
+```{r 6.3 Model Diagnostics and Assumption Checking }
+
+par(mfrow = c(2,3))
+plot(model_final)
+
+library(lmtest)
+dwtest(model_final)
+
+hist(residuals(model_final), 
+     breaks = 30,
+     main = "Histogram of Residuals",
+     xlab = "Residuals")
+
+cook <- cooks.distance(model_final)
+plot(cook, pch=20, main="Cook's Distance")
+abline(h = 1, col="red")
+
+```
+
+Overall, regression diagnostics showed no major violations of model assumptions, indicating that the final model provides a stable and reliable fit to the data.
+
+-   Diagnostic 1: Linearity (Residuals vs Fitted) Residuals were generally centered around zero with no strong structural patterns. A mild curvature in the smoother line suggests minor nonlinearity, but not at a level that threatens model validity. The linearity assumption is therefore reasonably satisfied.
+
+-   Diagnostic 2: Normality of Residuals (Q–Q Plot) Residuals aligned closely with the theoretical normal line in the central range, with expected deviations in the upper tail due to a few high-valued observations. Overall, residuals were approximately normally distributed.
+
+-   Diagnostic 3: Homoscedasticity (Scale–Location Plot) Residual spread was mostly constant across fitted values, with only a slight increase at higher fitted levels. This indicates that heteroscedasticity is minimal and the homoscedasticity assumption is largely met.
+
+-   Diagnostic 4: Independence of Residuals (Durbin–Watson Test) The Durbin–Watson test showed no evidence of autocorrelation (p = 0.114), consistent with the cross-sectional nature of NHANES. Residual independence is therefore satisfied.
+
+\*Diagnostic 5: Outliers and Influence (Residuals vs Leverage; Cook’s Distance) Most observations had low leverage, and although a few points showed moderately higher leverage, none exhibited concerning Cook’s distance values. All Cook’s D values were well below conventional thresholds, indicating that no single observation unduly influenced the model.
+
+### Step 8. Interpretation
+
+```{r 6.3 Interpretation}
+summary(model_final)
+```
+
+The final model for predicting HDL levels included age, sex, ethnicity, BMI, systolic blood pressure (rr_sys), recent cigarette consumption (cigsprd_prv30d), log-transformed blood cadmium (log_cd), and the sex×smoking interaction (male × cigsprd_prv30d).
+
+Adjusting for all other predictors:
+
+**Age**
+
+Each additional year of age was associated with a 0.00181 mmol/L increase in HDL (β = 0.00181, p = 0.137). The association was small and not statistically significant.
+
+**Sex**
+
+Males had 0.2628 mmol/L higher HDL compared with females (β = 0.2628, p \< 0.001). Sex remained a strong predictor of HDL.
+
+**Ethnicity**
+
+Relative to the Hispanic reference group: White: +0.0783 mmol/L (p = 0.137) Black: +0.2237 mmol/L (p \< 0.001) Other/Mixed: +0.1274 mmol/L (p = 0.064)
+
+Black ethnicity showed a significant positive association with HDL. The White and Other/Mixed groups did not reach significance.
+
+**BMI**
+
+Each 1-unit increase in BMI was associated with a 0.02446 mmol/L decrease in HDL (β = –0.02446, p \< 2×10⁻¹⁶). BMI was one of the strongest negative predictors.
+
+**Systolic Blood Pressure (rr_sys)**
+
+A 1 mmHg increase in systolic blood pressure corresponded to a 0.00283 mmol/L increase in HDL (β = 0.00283, p = 0.0065). The effect was statistically significant but small.
+
+**Recent Cigarette Consumption (cigsprd_prv30d)**
+
+Among females (male = 0), each additional cigarette consumed in the past 30 days was associated with a 0.00300 mmol/L decrease in HDL (β = –0.002998, p = 0.179). This main effect was not statistically significant.
+
+**Log-transformed cadmium (log_cd)**
+
+A 1-unit increase in log_cd was associated with a 0.0550 mmol/L increase in HDL (β = 0.0550, p = 0.029). This association was significant and contributed to model fit.
+
+**Sex × Smoking Interaction (male × cigsprd_prv30d)**
+
+The interaction term was significant (β = –0.00938, p = 0.014). Among females (male = 0), each additional cigarette consumed in the past 30 days was associated with a –0.0124 mmol/L reduction in HDL (–0.002998 + –0.009379) (p = 0.01437). This indicates that the negative effect of smoking on HDL is stronger in males than in females.
+
+#7 Cancer
+
+## 7.1 Estimate the lifetime prevalence of cancer. Can you also give an interval estimate?
+
+```{r cancer prevalence}
+
+library(broom)
+library(binom)
+
+cancer <- sum(data$cancer_ever == TRUE, na.rm = TRUE)
+tot <- sum(!is.na(data$cancer_ever))
+
+CI_CP <- binom.test(cancer, tot, conf.level = 0.95)
+tidy(CI_CP)
+
+
+```
+
+The estimated lifetime prevalence of cancer in the sample was 8.8%. Using an exact binomial method, the 95% confidence interval ranged from 8.0% to 9.6%.
+
+## 7.2 What are the prevalence estimates in those who were exposed to pollutants at work for a longer time period, and in those who weren’t? Is there a significant difference in prevalence between these two subgroups?
+
+```{r two proportion z test}
+
+x1 <- sum(data$cancer_ever[data$workpollut== 1 ] == TRUE, na.rm = TRUE)
+n1 <- sum(!is.na(data$cancer_ever[data$workpollut == 1]))
+p1 <- x1/(n1-x1)
+
+x2 <- sum(data$cancer_ever[data$workpollut == 0] == TRUE, na.rm = TRUE)
+n2 <- sum(!is.na(data$cancer_ever[data$workpollut == 0 ]))
+p2 <- x2/(n2-x2)
+
+prop_2sample <- prop.test(c(x1, x2), c(n1, n2), conf.level = 0.95, correct = TRUE) 
+
+OR <- p1/p2 
+
+p1;p2; OR; prop_2sample
+```
+
+Among individuals exposed to workplace pollutants for a longer period, the prevalence of the outcome was 7.6%. Among those without such exposure, the prevalence was 6.9%.A two-sample test for equality of proportions showed no statistically significant difference between the two groups (χ² = 0.67, p = 0.414).
+
+## 7.3 Adjust for age in the relationship between lifetime diagnosis of cancer and exposure to pollutants, using the categorized age variable (Note: No information on pollutant exposure was collected from participants aged 80+, so these cannot be included in the analysis). Does the adjustment for age change the picture? Interpret the model coefficients including the intercept.
+
+```{r}
+
+vars_log <- c("cancer_ever", "workpollut", "age_group") 
+data_mod_log <- data[, vars_log] %>% na.omit()
+
+data_mod_log$workpollut <- factor(data_mod_log$workpollut)
+data_mod_log$age_group  <- factor(data_mod_log$age_group)
+
+
+model_full_log <- glm(
+  cancer_ever ~ workpollut + age_group,
+  data = data_mod_log,
+  family = binomial
+)
+
+
+OR <- exp(coef(model_full_log))
+CI <- exp(confint(model_full_log))
+
+results <- cbind(OR, CI)
+colnames(results) <- c("OR", "2.5%", "97.5%")
+
+round(results, 3)
+
+
+```
+
+After adjusting for age categories, the association between workplace pollutant exposure and lifetime cancer diagnosis did not materially change. The adjusted odds ratio remained 1.11 (95% CI 0.87–1.42), almost identical to the unadjusted estimate, indicating no significant association.
+
+With pollut status being controled: Compared with the youngest age group, people aged 35–49 have about three times higher odds of having been diagnosed with cancer.This rises sharply in older groups: those aged 50–64 have nearly nine times the odds, and those aged 65–79 have more than twenty times the odds.
+
+The intercept (OR 0.011) reflects the very low baseline odds of cancer in unexposed individuals in the youngest age group.
+
+## 7.4 Try to find a good model of cancer diagnosis, describe, and interpret it, as you did for HDL.
+
+### Step 1. Candidate covariates
+
+```{r 7.4. candidate covariates}
+
+vars_glm <- c("age","male","ethnic","educ","bmi","smokstat","alc_lft","diab_lft","cd","hg","pb", "cancer_ever","workpollut")
+
+table(data_raw$cancer_ever)
+data_sub_glm <- data[, vars_glm]
+summary(data_sub_glm)
+
+```
+
+###Step 2. Data Preparation
+
+```{r 7.4 Data Preparation}
+
+library(dplyr)
+data_mod_glm <- data_sub_glm %>%
+  mutate(
+
+    male = factor(male,
+                  levels = c(0, 1),
+                  labels = c("Female", "Male")),
+
+    ethnic = factor(ethnic,
+                    levels = c(1, 2, 3, 4),
+                    labels = c("Hispanic", "White", "Black", "Other/Mixed")),
+
+    educ = factor(educ,
+                  levels = c(1, 2, 3, 4, 5),
+                  labels = c("1", "2", "3", "4","5")),
+
+    smokstat = factor(smokstat,
+                      levels = c(1, 2, 3),
+                      labels = c("Non-smoker", "Occasional smoker", "Daily smoker")),
+
+    alc_lft = factor(alc_lft,
+                     levels = c(1, 2, 3),
+                     labels = c("Never", "Rarely", "Regularly")),
+    diab_lft = factor(diab_lft,
+                     levels = c(1, 2, 3),
+                     labels = c("None", "Prediabetes", "Diabetes")),
+    
+    cancer_ever = factor(cancer_ever,
+                         levels = c(0, 1),
+                         labels = c("No cancer", "Cancer")),
+   workpollut = factor(workpollut,
+                         levels = c(0, 1))
+    
+  )  
+
+data_mod_glm <- data_mod_glm %>%
+  mutate(
+    log_cd = log(cd),
+    log_hg = log(hg),
+    log_pb = log(pb)
+  )
+
+data_mod_glm <- data_mod_glm %>% na.omit()
+
+
+nrow(data_mod_glm)
+summary(data_mod_glm)
+```
+
+### Step 3. Exploratory Data Analysis (EDA)
+
+```{r 7.4 Exploratory Data Analysis, warning=FALSE}
+
+summary(data_mod_glm)
+sapply(data_mod_glm, function(x) sum(is.na(x)))
+
+table(data_mod_glm$cancer_ever)
+
+numeric_vars <- c("bmi","cd","hg","pb")
+par(mfrow=c(2,2))
+for (v in numeric_vars) hist(data_mod_glm[[v]], main=v, col="gray")
+par(mfrow=c(1,1))
+
+
+cat_vars <- c("male","ethnic","educ","smokstat","alc_lft","diab_lft","workpollut")
+lapply(data_mod_glm[, cat_vars], table)
+
+for (v in numeric_vars) {
+  boxplot(data_mod_glm[[v]] ~ data_mod_glm$cancer_ever,
+          main=paste(v, "by cancer status"))
+}
+
+
+library(broom)
+univar_vars <- c("age","bmi","cd","hg","pb","male","smokstat","alc_lft","diab_lft")
+
+results <- lapply(univar_vars, function(v) {
+  f <- as.formula(paste("cancer_ever ~", v))
+  mod <- glm(f, family = binomial, data = data_mod_glm)
+  tidy_mod <- tidy(mod, conf.int = TRUE, exp = TRUE)  
+  tidy_mod$variable <- v
+  return(tidy_mod)
+})
+
+univar_table <- do.call(rbind, results)
+univar_table <- univar_table[univar_table$term != "(Intercept)", ]
+
+univar_table
+
+
+```
+
+The overall data quality was good, and the number of cancer events was sufficient for logistic regression. Blood metal concentrations showed strong right-skewness and therefore required logarithmic transformation. The crude associations of BMI and smoking with cancer were influenced by survivor bias and reverse causation inherent to the cross-sectional design; however, all covariates were retained in the multivariable model to appropriately adjust for confounding.
+
+### Step 4. Specification of the Initial Full Model
+
+```{r 7.4 Specification of the Initial Full Model}
+
+
+data_mod_glm$diabetes_status <- data$diabetes_status[match(rownames(data_mod_glm), rownames(data))]
+data_mod_glm$diabetes_status <- factor(data_mod_glm$diabetes_status)
+
+library(dplyr)
+
+data_mod_glm <- data_mod_glm %>%
+  mutate(
+    log_cd = log(cd + 0.001),
+    log_hg = log(hg + 0.001),
+    log_pb = log(pb + 0.001)
+  )
+
+
+model <- glm(
+ cancer_ever ~ age + male + ethnic + educ +
+   bmi + smokstat + alc_lft + diabetes_status +
+   log_cd + log_hg + log_pb,
+ family = binomial, data = data_mod_glm
+)
+
+summary(model)
+
+```
+
+### Step 5. Model Selection - AIC
+
+```{r 7.4 Model Selection - AIC}
+
+library(MASS)
+ 
+
+model_final_glm <- stepAIC(model_full, direction = "backward", trace = TRUE)
+summary(model_final_glm)
+
+
+```
+
+### Step 6. Model Diagnostics and Assumption Checking
+
+```{r 7.4 Model Diagnostics and Assumption Checking, warning=FALSE}
+
+library(car)
+vif(model_final_glm)
+
+plot(cooks.distance(model_final_glm), type="h", main="Cook's Distance")
+abline(h = 4/length(model_final_glm$fitted.values), col="red", lty=2)
+
+plot(hatvalues(model_final_glm), main="Leverage", ylab="Hat values")
+abline(h = 2*length(coef(model_final_glm))/nrow(data_mod_glm), col="red", lty=2)
+
+plot(rstandard(model_final_glm), main="Standardized Residuals")
+abline(h = c(-3, 3), col="red", lty=2)
+
+install.packages("ResourceSelection")
+library(ResourceSelection)
+hoslem.test(model_final_glm $y, fitted(model_final_glm), g=10)
+
+
+library(car)
+boxTidwell(cancer_ever ~ age, data = data_mod_glm)
+
+plot(model_final_glm, which=1)
+
+```
+
+Overall, the diagnostic checks showed that the logistic regression model is performing well.
+
+-   The multicollinearity assessment (GVIF values all near 1) indicated that the predictors do not interfere with each other. The Hosmer–Lemeshow test (p = 0.088) suggested that the model fits the data adequately.
+
+-   The Cook’s Distance plot showed that all influence values were very small, meaning no individual observation had an undue impact on the model.
+
+-   The Leverage plot similarly showed that all hat values were low, indicating no unusually influential data points.
+
+-   The Standardized Residuals plot showed that most residuals were small and none exceeded the ±3 threshold, suggesting no major outliers.
+
+-   Finally, the Pearson Residuals vs. Fitted plot displayed no systematic trend, indicating no evidence of model misspecification.
+
+Taken together, these diagnostics confirm that the final model is stable and suitable for interpretation.
+
+### Step 7. Interpretation
+
+```{r 7.4 Interpretation}
+summary(model_final_glm)
+```
+
+The AIC-selected logistic regression model retained age, sex, and ethnicity as predictors of lifetime cancer diagnosis.
+
+-   Age remained the strongest predictor (β = 0.0666, p \< 0.001).The corresponding odds ratio, OR = exp(0.0666) = 1.069, indicates that cancer odds increase by roughly 6.9% per additional year of age, consistent with the cumulative nature of cancer development.
+
+-   Sex showed a borderline association (β = 0.354, p = 0.099), with males having approximately 42% higher odds of reporting a lifetime cancer diagnosis than females (OR = exp(0.354) = 1.42), although this effect did not reach conventional statistical significance.
+
+-   Ethnicity: Compared with the Hispanic reference group, White individuals had marginally higher odds of cancer history (β = 0.547, p = 0.068).The estimated OR = 1.73 suggests that White adults had \~73% higher odds of having been diagnosed with cancer, though the wide confidence interval reflects uncertainty.
+
+These findings broadly align with U.S. epidemiological patterns, where age is the dominant risk factor and White adults show higher lifetime prevalence of several major cancers.

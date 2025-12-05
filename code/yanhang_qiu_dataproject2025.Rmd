@@ -22,7 +22,7 @@ a)  What are important characteristics of the NHANES study (study design, target
 
 b\. What general categories (such as "demographics", "lab results") can the variables in the dataset be sorted into?
 
-**Answer to 1b:**
+# **Answer to 1b:**
 
 The variables in the dataset can be categorized into groups such as demographic data, examination data, dietary data, lifestyles, disease, family history, selfrated_health, depression, environment and toxic,
 
@@ -495,7 +495,7 @@ hg_by_male <- data %>%
 hg_by_male %>%
   mutate(across(where(is.numeric), ~ round(.x, 2)))
 
-hist(data$hg, col = 2, breaks = 80)
+hist(data$hg, col = 2, breaks = 80) 
 ```
 
 **Answer to 5a:**
@@ -582,7 +582,7 @@ b\. Use both parametric and non-parametric statistical tests to test for the sta
 
 **Answer to 5b :**
 
-Hg is a continuous variable, while male is a binary variable. Normally, when blood mercury levels follow a normal distribution, a parametric test — the independent samples t-test — is appropriate to examine whether blood mercury levels differ between males and females. When the assumption of normality is violated, the non-parametric Mann–Whitney test should be used instead.
+Hg is a continuous variable, while male is a binary variable. Normally, when blood mercury levels follow a normal distribution, — is appropriate to examine whether blood mercury levels differ between males and females. When the assumption of normality is violated, the non-parametric Mann–Whitney test should be used instead.
 
 The test of normality indicated that Hg was not normally distributed in either group. By comparing the histograms, we observed that both distributions were similarly and heavily right-skewed, which was further supported by the skewness statistics.
 
@@ -1251,11 +1251,12 @@ model_full <- glm(
 model_final_glm <- stepAIC(model_full, direction = "backward", trace = TRUE)
 summary(model_final_glm)
 
-
 library(broom)
 tidy(model_stepAIC, conf.int = TRUE, exp = TRUE)
 
 ```
+
+\% gfg
 
 Step 5. Model Diagnostics and Assumption Checking
 
@@ -1287,7 +1288,9 @@ plot(model, which=1)
 Step 6. Interpretation
 
 ```{r Step 6. Interpretation}
+
 summary(model_final_glm)
+
 ```
 
 The final AIC-optimized logistic regression model identified age and ethnicity as the only independent predictors of lifetime cancer diagnosis.

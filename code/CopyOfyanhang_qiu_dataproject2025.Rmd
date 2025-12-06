@@ -26,7 +26,7 @@ Familiarize yourself with the NHANES study design and the variables in the datas
 
 ## 1.2 What general categories (such as "demographics", "lab results") can the variables in the dataset be sorted into?
 
-The variables in the dataset can be categorized into groups such as demographic data, examination data, dietary data, lifestyles, disease, family history, selfrated_health, depression, environment and toxic,
+The variables in the dataset can be categorized into groups such as demographic data, examination data, dietary data, lifestyles, disease, family history, selfrated_health, depression, environment and toxic.
 
 ```{r 1.2, message=FALSE, warning=FALSE}
 
@@ -88,7 +88,7 @@ To deal with this problem, the age variable are recoded into the following categ
 library(ggplot2) 
 
 plot_age <- ggplot(data, aes(x = age)) +
-  geom_histogram(fill = "pink", color = "white",bins = 30) +
+  geom_histogram(fill = "pink", color = "black",bins = 30) +
   labs(title = "age",x = "Age",y = "Count") +
   theme_minimal()
 
@@ -100,6 +100,9 @@ The age distribution in the sample shows limited representativeness of the U.S. 
 
 ```{r 2.1 categorial age distribution, message=FALSE, warning=FALSE}
 library(dplyr)
+library(ggplot2)
+
+
 data <- data %>%
   mutate(
     age_group = case_when(
@@ -109,14 +112,37 @@ data <- data %>%
       age >= 50 & age < 65 ~ "50-64",
       age >= 65 & age < 80 ~ "65-79",
       age >= 80 ~ "80+"
+    ),
+    age_group = factor(
+      age_group,
+      levels = c("0-17","18-34","35-49","50-64","65-79","80+")
     )
   )
 
-plot_age_cate <-ggplot(data, aes(x=factor(age_group))) + geom_bar(fill = "#BFD7EA") + 
-  labs(title = "age_group", x = "Age Group", y = "Count") +
+
+tab_age <- data %>%
+  count(age_group, name = "n")
+
+tab_age
+
+
+plot_age_cate <- ggplot(tab_age, aes(x = age_group, y = n)) +
+  geom_col(fill = "#BFD7EA", color = "black") +
+  geom_text(aes(label = n),
+            vjust = -0.3,
+            size = 4,
+            color = "black") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  labs(
+    title = "Age Group Distribution",
+    x = "Age Group",
+    y = "Count"
+  ) +
   theme_minimal()
 
 plot_age_cate
+
+
 ```
 
 By grouping participants into age categories, we can reweight each group so that the overall age distribution in the sample better reflects that of the U.S. population.
@@ -144,77 +170,82 @@ before_after
 
 ```{r 2.3 self-rated health, message=FALSE, warning=FALSE}
 
-data <- data %>%
-  mutate(
-    srhgnrl_f = factor(
-      srhgnrl,
-      levels = 1:5,
-      labels = c("Excellent", "Very good", "Good", "Fair", "Poor"),
-      ordered = TRUE
-    )
-  )
-
 library(dplyr)
-
-tab_srh <- data %>%
-  count(srhgnrl_f, name = "n") %>%
-  mutate(
-    prop = n / sum(n)
-  )
-tab_srh
-
-
 library(ggplot2)
 library(scales)
 
-
-p1 <- data %>%
+tab_srh <- data %>%
   filter(!is.na(srhgnrl_f)) %>%
-  ggplot(aes(x = srhgnrl_f, group = 1)) +
-  geom_bar(aes(y = after_stat(prop)), fill = "#F6BD60") +
-  scale_y_continuous(labels = percent_format()) +
+  count(srhgnrl_f, name = "n") %>%
+  mutate(prop = n / sum(n))
+
+p1 <- ggplot(tab_srh, aes(x = srhgnrl_f, y = prop)) +
+  geom_col(fill = "#F6BD60",color = "black") +
+  geom_text(
+    aes(label = percent(prop, accuracy = 0.1)),
+    vjust = -0.3,
+    size = 4
+  ) +
+  scale_y_continuous(labels = percent_format(), expand = expansion(mult = c(0, 0.1))) +
   labs(
     title = "Self-rated health in general",
     x = "Self-rated health category",
     y = "Proportion"
-  )
+  ) +
+  theme_minimal()
 
 p1
 
 
-
-
 ```
 
-When interpreting the self-rated health distribution, it is important to note that the scale is ordinal and prone to central-tendency responses.**Most importantly, missing values must be considered**, as excluding or including them can influence the perceived distribution and may introduce bias if the missingness is not random.
+When interpreting the self-rated health distribution, it is important to note that the scale is ordinal and prone to central-tendency responses. **Most importantly, missing values must be considered**, as excluding or including them can influence the perceived distribution and may introduce bias if the missingness is not random.
 
 To assess whether missingness in the self-rated health variable was randomly distributed across participant characteristics, we conducted chi-square tests comparing the proportion of missing responses across key demographic and socioeconomic groups.
 
 ```{r 2.3 missing value, message=FALSE, warning=FALSE}
 
-library(dplyr)
-library(broom)
 
-vars <- c("male", "age_group", "increl")
+data$missing_srhgnrl <- ifelse(is.na(data$srhgnrl), 1, 0)
 
-chisq_summary <- lapply(vars, function(v) {
-  tbl <- table(self_health[[v]], self_health$missing_self)
-  broom::tidy(chisq.test(tbl)) %>%
-    mutate(variable = v)
-}) %>% 
-  bind_rows() %>%
-  select(variable, statistic, parameter, p.value)
 
-chisq_summary
+tab_male <- table(data$male, data$missing_srhgnrl)
+chisq_male <- chisq.test(tab_male)
+chisq_male
+
+
+tab_age <- table(data$age_group, data$missing_srhgnrl)
+chisq_age <- chisq.test(tab_age)
+chisq_age
+
+
+tab_increl <- table(data$increl, data$missing_srhgnrl)
+chisq_increl <- chisq.test(tab_increl)
+chisq_increl
+
 
 
 ```
 
-Chi-square tests showed that missingness in the self-rated health variable was not random, but significantly related to sex (χ² = 13.52, p \< 0.001), age group (χ² = 40.49, p \< 0.001), and family income (χ² = 23.96, p \< 0.001). Men, older participants, and those with lower income were more likely to have missing values. This indicates that the missing-data mechanism is unlikely to be MCAR, and complete-case analyses may bias the results.
+Chi-square tests showed that missingness in the self-rated health variable was not random, but significantly related to sex (χ² = 13.52, p = 0.002), age group (χ² = 40.49, p = 0.000), and family income (χ² = 23.96, p \< 0.000). Men, older participants, and those with lower income were more likely to have missing values. This indicates that the missing-data mechanism is unlikely to be MCAR, and complete-case analyses may bias the results.
 
 # 3 Diabetes and Ethnicity
 
 ## 3.1 How is the diabetes status distributed in your data set? Summarize the 2 diabetes groups in a single group and recode the variable for diabetes status into two groups: non-diabetes and diabetes. Give an interval estimate for diabetes in your dataset.
+
+ci_table \<- CI_Wilson %\>%
+
+transmute(
+
+estimate_percent = round(mean \* 100, 1),
+
+lower_95 = round(lower \* 100, 1),
+
+upper_95 = round(upper \* 100, 1)
+
+)
+
+ci_table
 
 ```{r 3.1 diabetes recode, message=FALSE, warning=FALSE}
 
@@ -282,20 +313,22 @@ text(
 
 par(mfrow = c(1, 1))
 
-# Wilson CI
+
+library(binom)
 x <- sum(data$diabetes_status == "diabetes", na.rm = TRUE)
 n <- sum(!is.na(data$diabetes_status))
 
-CI_Wilson <- binom.confint(x, n, conf.level = 0.95, methods = "wilson")
+ci <- binom.confint(x, n, methods = "wilson")
 
-ci_table <- CI_Wilson %>%
+ci_table <- ci %>%
   transmute(
-    estimate_percent = round(mean * 100, 1),
+    prevalence_percent = round(mean * 100, 1),
     lower_95 = round(lower * 100, 1),
     upper_95 = round(upper * 100, 1)
   )
 
 ci_table
+
 ```
 
 After recoding diabetes status into two groups (“diabetes” vs. “non-diabetes”), 4,692 participants had valid data. Among them, 602 individuals (12.8%) had diabetes and 4,090 (87.2%) did not, showing that diabetes is relatively uncommon in this sample.
@@ -608,7 +641,7 @@ data_sub_lm <- data_sub_lm %>%
 data_mod_lm <- na.omit(data_sub_lm)
 
 nrow(data_mod_lm)
-summary(data_mod_lm)
+
 
 ```
 
@@ -737,10 +770,9 @@ Using backward AIC selection, the final model retained age, sex, ethnicity, BMI,
 
 library(car)
 vif(model_final_lm)
-
 ```
 
-After computing the adjusted GVIF for each predictor, all values were well below commonly used thresholds (GVIF\^(1/(2\*df)) \< 2-5), indicating that multicollinearity is not a concern in this model.
+After computing the adjusted GVIF for each predictor, all values were well below commonly used thresholds (GVIF\^(1/(2\*df)) \< 2), indicating that multicollinearity is not a concern in this model.
 
 ### Step 7. Model Diagnostics and Assumption Checking
 
@@ -749,17 +781,17 @@ The following diagnostics ensure that the linear model is valid, unbiased, and r
 ```{r 6.3 Model Diagnostics and Assumption Checking }
 
 par(mfrow = c(2,3))
-plot(model_final)
+plot(model_final_lm)
 
 library(lmtest)
-dwtest(model_final)
+dwtest(model_final_lm)
 
-hist(residuals(model_final), 
+hist(residuals(model_final_lm), 
      breaks = 30,
      main = "Histogram of Residuals",
      xlab = "Residuals")
 
-cook <- cooks.distance(model_final)
+cook <- cooks.distance(model_final_lm)
 plot(cook, pch=20, main="Cook's Distance")
 abline(h = 1, col="red")
 
@@ -775,17 +807,17 @@ Overall, regression diagnostics showed no major violations of model assumptions,
 
 -   Diagnostic 4: Independence of Residuals (Durbin–Watson Test) The Durbin–Watson test showed no evidence of autocorrelation (p = 0.114), consistent with the cross-sectional nature of NHANES. Residual independence is therefore satisfied.
 
-\*Diagnostic 5: Outliers and Influence (Residuals vs Leverage; Cook’s Distance) Most observations had low leverage, and although a few points showed moderately higher leverage, none exhibited concerning Cook’s distance values. All Cook’s D values were well below conventional thresholds, indicating that no single observation unduly influenced the model.
+-   Diagnostic 5: Outliers and Influence (Residuals vs Leverage; Cook’s Distance) Most observations had low leverage, and although a few points showed moderately higher leverage, none exhibited concerning Cook’s distance values. All Cook’s D values were well below conventional thresholds, indicating that no single observation unduly influenced the model.
 
 ### Step 8. Interpretation
 
 ```{r 6.3 Interpretation}
-summary(model_final)
+summary(model_final_lm)
 ```
 
 The final model for predicting HDL levels included age, sex, ethnicity, BMI, systolic blood pressure (rr_sys), recent cigarette consumption (cigsprd_prv30d), log-transformed blood cadmium (log_cd), and the sex×smoking interaction (male × cigsprd_prv30d).
 
-Adjusting for all other predictors:
+**Adjusting for all other predictors:**
 
 **Age**
 
@@ -821,7 +853,7 @@ A 1-unit increase in log_cd was associated with a 0.0550 mmol/L increase in HDL 
 
 The interaction term was significant (β = –0.00938, p = 0.014). Among females (male = 0), each additional cigarette consumed in the past 30 days was associated with a –0.0124 mmol/L reduction in HDL (–0.002998 + –0.009379) (p = 0.01437). This indicates that the negative effect of smoking on HDL is stronger in males than in females.
 
-#7 Cancer
+# 7 Cancer
 
 ## 7.1 Estimate the lifetime prevalence of cancer. Can you also give an interval estimate?
 
@@ -878,7 +910,7 @@ model_full_log <- glm(
   data = data_mod_log,
   family = binomial
 )
-
+model_full_log
 
 OR <- exp(coef(model_full_log))
 CI <- exp(confint(model_full_log))
@@ -893,7 +925,7 @@ round(results, 3)
 
 After adjusting for age categories, the association between workplace pollutant exposure and lifetime cancer diagnosis did not materially change. The adjusted odds ratio remained 1.11 (95% CI 0.87–1.42), almost identical to the unadjusted estimate, indicating no significant association.
 
-With pollut status being controled: Compared with the youngest age group, people aged 35–49 have about three times higher odds of having been diagnosed with cancer.This rises sharply in older groups: those aged 50–64 have nearly nine times the odds, and those aged 65–79 have more than twenty times the odds.
+With pollute status being controlled: Compared with the youngest age group, people aged 35–49 have about three times higher odds of having been diagnosed with cancer. This rises sharply in older groups: those aged 50–64 have nearly nine times the odds, and those aged 65–79 have more than twenty times the odds.
 
 The intercept (OR 0.011) reflects the very low baseline odds of cancer in unexposed individuals in the youngest age group.
 
@@ -907,7 +939,7 @@ vars_glm <- c("age","male","ethnic","educ","bmi","smokstat","alc_lft","diab_lft"
 
 table(data_raw$cancer_ever)
 data_sub_glm <- data[, vars_glm]
-summary(data_sub_glm)
+
 
 ```
 
@@ -959,9 +991,9 @@ data_mod_glm <- data_mod_glm %>%
 
 data_mod_glm <- data_mod_glm %>% na.omit()
 
-
 nrow(data_mod_glm)
-summary(data_mod_glm)
+
+
 ```
 
 ### Step 3. Exploratory Data Analysis (EDA)
@@ -1027,7 +1059,7 @@ data_mod_glm <- data_mod_glm %>%
   )
 
 
-model <- glm(
+model_full_glm <- glm(
  cancer_ever ~ age + male + ethnic + educ +
    bmi + smokstat + alc_lft + diabetes_status +
    log_cd + log_hg + log_pb,
@@ -1045,7 +1077,7 @@ summary(model)
 library(MASS)
  
 
-model_final_glm <- stepAIC(model_full, direction = "backward", trace = TRUE)
+model_final_glm <- stepAIC(model_full_glm, direction = "backward",  trace = FALSE)
 summary(model_final_glm)
 
 
@@ -1069,12 +1101,11 @@ abline(h = c(-3, 3), col="red", lty=2)
 
 install.packages("ResourceSelection")
 library(ResourceSelection)
-hoslem.test(model_final_glm $y, fitted(model_final_glm), g=10)
+hoslem.test(model_final_glm$y, fitted(model_final_glm), g = 10)
 
 
 library(car)
 boxTidwell(cancer_ever ~ age, data = data_mod_glm)
-
 plot(model_final_glm, which=1)
 
 ```

@@ -243,20 +243,6 @@ Chi-square tests showed that missingness in the self-rated health variable was n
 
 ## 3.1 How is the diabetes status distributed in your data set? Summarize the 2 diabetes groups in a single group and recode the variable for diabetes status into two groups: non-diabetes and diabetes. Give an interval estimate for diabetes in your dataset.
 
-ci_table \<- CI_Wilson %\>%
-
-transmute(
-
-estimate_percent = round(mean \* 100, 1),
-
-lower_95 = round(lower \* 100, 1),
-
-upper_95 = round(upper \* 100, 1)
-
-)
-
-ci_table
-
 ```{r 3.1 diabetes recode, message=FALSE, warning=FALSE}
 
 library(dplyr)
@@ -423,7 +409,7 @@ mosaicplot(table(data$srhgnrl, data$hrsworked_prvwk_cat), color = TRUE, main = "
 
 According to the mosaic plot, the distribution of self-rated health levels is similar across the two working-hour groups (\< 40 vs. ≥ 40 hours).
 
-##4.4 Use an appropriate statistical test to test for the statistical significance of this relation. Interpret the results of the test.
+## 4.4 Use an appropriate statistical test to test for the statistical significance of this relation. Interpret the results of the test.
 
 ```{r 4.4 chi test, message=FALSE, warning=FALSE }
 
@@ -954,7 +940,7 @@ data_sub_glm <- data[, vars_glm]
 
 ```
 
-###Step 2. Data Preparation
+### Step 2. Data Preparation
 
 ```{r 7.4 Data Preparation}
 

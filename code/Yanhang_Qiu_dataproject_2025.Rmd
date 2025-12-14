@@ -144,9 +144,6 @@ data <- data %>%
 tab_age <- data %>%
   count(age_group, name = "n")
 
-tab_age
-
-
 plot_age_cate <- ggplot(tab_age, aes(x = age_group, y = n)) +
   geom_col(fill = "#BFD7EA", color = "black") +
   geom_text(aes(label = n),

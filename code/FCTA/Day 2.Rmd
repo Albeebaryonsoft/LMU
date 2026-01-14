@@ -1,0 +1,459 @@
+---
+title: "Day 2"
+output: html_document
+---
+
+**statistic model:**
+* Describe data-generating process, makes assumption about the type of variable and the shape of distribution (e.g., normally distributed)
+
+* Assumption about the distribution of the outcome: 
+** Linear regression - normal distributed outcome; if not, the fit is not good. Example: blood pressure, cholesterol, Iron in blood, weight
+
+* simple check :
+```{r}
+model <- lm(cty ~ 0 + cyl, data = mpg) 
+
+nobs(model) # to check the number of observations
+coef(model)
+confint(model)
+fitted(model) # get fitted value 
+
+resid(model) # get residuals 
+rstandard(model)
+
+# broom and tidy
+install.packages("broom")
+tidy(model, conf.int = TRUE) # create a tidy output
+model %>% tbl_regression() %>% add_n()
+
+
+# predict values for new observations predict (),  
+# use visreg to visualize the parameter estimates 
+newdata <- data.frame(cyl = c(100,200)) 
+predict (model, newdata = newdata, se.fit = TRUE, interval = "confidence", level = 0.95)
+
+```
+
+* Diagnostics of model
+** 1: errors are distributed normally
+** 2: error variance is constant
+** 3: error for one observation is not influenced by the value of any other error
+** 4: individual outlines might strongly influence the parameter estimates
+If assumptions are violated? e.g., can increase the complexity
+
+```{r}
+
+plot(model)
+
+# Q-Q plots: Check assumption 1. We compare the residuals to standard normal-Normal (0,1), we want dots on the line. 
+# Residuals vs Fitted: Check assumption 2. We want the red line to be horizontal. 
+# Scale-Location: We want the red line to be horizontal. 
+# Residuals vs leverage : check assumption 4. residuals = outcome outlines. leverage = predictor outlines; cook's distance (the curves). We want the red line to be horizontal. 
+
+
+```
+
+*model misspefification
+If we use a model to simulate data, the model should look like the observed data. 
+All the plots mentioned above, look at model misspecification from different angels. 
+
+```{r}
+# 1 do the simulation first
+simulate(model, nsim = 5, seed = 2175)
+# nsim = 5, simulate 5 times
+# seed = by setting the same starting value, they are integers, do no mean anything. 
+
+# 2 plot the simulation
+# 3 compare with the real data. Ideally, the real data is within the simulation; else, the model doesn't fit very well. By including more predictors, the fit will be improved
+
+```
+
+*compare fit
+```{r}
+
+model0 <- lm(cty ~ 1, data = mpg) 
+extractAIC(model0)
+extractAIC(model)
+AIC(model0, model) # AIC should be used to compare models only when the models use the same dataset.
+anova(model0, model) # Used for nested models, model fit is tested against each other
+
+# ? if the missingness is different in the two model. Solution? 
+# some people speak against stepwise AIC, should be based on domain knowledge. 
+
+
+```
+
+**LIVE CODING** 
+
+0 Package preparation
+```{r}
+?MASS::hills # loading packages
+
+install.packages("visreg")
+install.packages("gglm")
+
+library(conflicted)
+library(tidyverse) # we can check core tidyverse packages by ?
+library(MASS)
+library(magrittr)
+library(gtsummary)
+library(broom)
+library(gglm)
+library(visreg) # to visualise regression model
+
+conflicts_prefer(dplyr::filter(), dplyr::select())
+conflict_scout()
+
+```
+
+1 Research question: 
+How distance (longer or shorter) affect time of race?
+
+2 Data Exploration
+```{r}
+
+dim(hills) # dimensions
+head(hills) # a brief summary
+
+hills %>% map(class)
+hills %>% lapply(class)
+hills %>% 
+  tbl_summary(
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})"
+    ),
+    missing = "always"
+  )
+
+hills %>% 
+  ggplot(aes(x = time)) +
+  geom_density() +
+  xlim(0, 250)  # from 0 to 250, the x aex
+  theme_bw()
+
+hills %>% 
+  ggplot(aes(x = dist)) +
+  geom_density() +
+  xlim(0, 30) 
+  theme_bw()
+  
+hills %>% 
+  ggplot(aes(x = climb)) +
+  geom_density() +
+  theme_bw()
+
+
+hills %>% 
+  ggplot(aes(x = dist, y = time)) +
+  geom_point() +
+  theme_bw()
+
+hills %>% 
+  ggplot(aes(x = climb, y = time)) +
+  geom_point() +
+  theme_bw()
+
+
+```
+
+3 Data Preparation: creat variables, and check if it is sucessfully created
+```{r}
+
+one_mile_equals_km <- 1.60934
+one_foot_equals_m <- 0.30480
+
+data <- hills %>%
+  mutate(
+    dist_km = dist* one_mile_equals_km,
+    climb_m = climb *one_foot_equals_m,
+    climb_m_bin = case_when(
+      climb_m < 500 ~ "flat",
+      climb_m >= 500 ~ "steep"
+    ),
+    climb_m_bin = as.factor(climb_m_bin)
+  ) %>%
+  rownames_to_column("nameeee") # assign a name to the colume
+
+rm(one_mile_equals_km,one_foot_equals_m) # remove, and make the environment clean
+
+data %>%
+  select(dist, dist_km) %>%
+  plyr::count() %>%
+  view()
+
+data %>%
+  select(climb, climb_m) %>%
+  plyr::count() %>%
+  view()
+
+summary(data$climb_m_bin)
+class(data$climb_m_bin)
+
+data %>%
+  select(climb_m, climb_m_bin) %>%
+  plyr::count() %>%
+  view()
+
+data %>%
+  ggplot(aes(x = dist_km)) +
+  geom_boxplot() +
+  xlim(0, 50) 
+  theme_bw()
+
+```
+
+4 modeling
+```{r}
+
+# fit
+m0 <- lm(time ~ 1, data = data)
+nobs(m0)
+summary(m0) # intercept here is the mean of time
+
+#evaluate
+tidy(m0,conf.int = TRUE)
+coef(m0)
+confint(m0)
+
+fitted(m0) # here all values are the same, because that's mean
+resid(m0)
+data$time - fitted(m0)
+data$time - resid(m0) # observed value - residule = our intercept, which is mean here. 
+plot(m0) # obviously, it is a bad model.
+
+
+# + dist_km
+m1 <- lm(time ~ dist_km, data = data)
+nobs(m1)
+summary(m1)
+
+m1 %>% tbl_regression(intercept = TRUE)
+
+
+m1 %>% visreg("dist_km")
+
+simulate(m1, nsim = 100 ) %>% 
+  pivot_longer(
+    cols = everything(),
+    names_to = "sim",
+    values_to = "val"
+  )%>% 
+  ggplot() +
+  geom_density(aes(x = val, group = sim), color = "grey") +
+  geom_density(data = data, mapping = aes(x = time), linewidth = 1) +
+  theme_bw()
+
+# + dist_km and climb_m
+
+m2 <- lm(time ~ dist_km + climb_m, data = data)
+nobs(m2)
+summary(m2)
+
+m2 %>% tbl_regression(intercept = TRUE)
+
+
+simulate(m2, nsim = 100) %>%   # better fit compared to m1 and m0
+  pivot_longer(
+    cols = everything(),
+    names_to = "sim",
+    values_to = "val"
+  )%>% 
+  ggplot() +
+  geom_density(aes(x = val, group = sim), color = "grey") +
+  geom_density(data = data, mapping = aes(x = time), linewidth = 1) +
+  theme_bw()
+
+AIC(m0,m1,m2) # m2 is the best
+anova(m0,m1,m2) # same result
+
+# + dist_km * climb_m 
+
+m3_0 <- lm(time ~ dist_km * climb_m_bin , data = data) 
+# the output reflects the coefficents of all terms
+# m3 <- lm(time ~ dist_km + climb_m + dist_km * climb_m_bin , data = data)
+
+m3_0 %>%
+  tidy(conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high)
+
+intercept <- 17.030822
+b_dist <- 1.875182
+b_climb <- -13.919384
+b_dist_climb <- 3.100137
+
+intercept + b_dist *5 + b_climb * 500 + b_dist_climb * 5*500 
+intercept + 5*(b_dist + b_dist_climb * 500) + b_climb * 500
+intercept + 500* (b_climb + b_dist_climb * 5) + b_dist * 5
+# this illustrates how to understand and interprate our interaction term 
+
+
+```
+
+======== Exercise ==========
+
+
+```{r}
+
+m3 <- lm(time ~ dist_km * climb_m, data = data)
+summary(m3)
+
+
+intercept_1 <- 9.3954374
+b_dist_km <- 1.875182
+b_climb_m <- -0.0031857
+b_dist_climb_1 <- 0.0020041
+
+intercept_1 + b_dist_km *5 + b_climb_m  * 500 + b_dist_climb_1 * 5*100 
+intercept_1 + b_dist_km *5 + b_climb_m  * 1000 + b_dist_climb_1 * 5*1000
+intercept_1 + b_dist_km *10 + b_climb_m  * 500 + b_dist_climb_1 * 10*100
+intercept_1 + b_dist_km *10 + b_climb_m  * 1000 + b_dist_climb_1 * 10*1000 
+
+
+```
+
+1 Research Question: 
+Does the relationship between heart weights and body weight in adult cats differ between sex?
+
+2 Data Exploration 
+```{r}
+
+?MASS::cats
+
+head(cats)
+
+dim(cats)  # check dimension
+cats %>% map(class)  # check class
+
+cats %>%    # check missing value and summary
+  tbl_summary(
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})"
+    ),
+    missing = "always"
+  ). 
+
+
+# geom_bar(), geom_density(), geom_histogram()
+# Sex - factor, Bwt - numeric, Hwt - numeric
+
+cats %>% 
+  ggplot(aes(x = Sex)) + 
+  geom_bar() +
+  theme_bw() 
+
+cats %>% 
+  ggplot(aes(x = Bwt)) + 
+  geom_density() +
+  xlim(0, 5) +
+  theme_bw()
+
+cats %>% 
+  ggplot(aes(x = Hwt)) + 
+  geom_density() +
+  xlim(0, 25) +
+  theme_bw()
+
+# when the parameter is a variable, put it in the aes(), if not, outside aes (); 
+cats %>% 
+  ggplot(aes(x = Bwt, y = Hwt, shape = Sex)) + 
+  geom_point(color = "blue") +    # for color or shape that is not a variable, try put in geom_point;
+  theme_bw()
+
+
+cats %>% 
+  ggplot(aes(x = Bwt, y = Hwt, shape = Sex,color = Sex)) + 
+  geom_point() +    # for color or shape that is not a variable, try put in geom_point;
+  theme_bw()
+```
+
+
+3 Data Preparation
+```{r}
+
+exe_data <- cats %>%
+  mutate(
+    female = case_when(
+      Sex == "F" ~ 1,
+      Sex == "M" ~ 0
+    ),
+    Bwt_sd = (Bwt - mean (Bwt)) / sd (Bwt),   # learn the implanted function mean() and sd ()
+    Hwt_sd = (Hwt - mean (Hwt)) / sd (Hwt)
+  )
+
+
+```
+
+4 Modeling
+```{r}
+# modeling 1
+exe_model0 <- lm(Hwt ~ 1, data = exe_data) 
+nobs(exe_model0)
+
+
+exe_model1 <- lm(Hwt ~ Bwt, data = exe_data) 
+
+tidy(exe_model1,conf.int = TRUE)
+# exe_model1 %>% tidy(conf.int = TRUE)
+exe_model1 %>% tbl_regression()
+
+summary(exe_model1)
+coef(exe_model1)
+confint(exe_model1)
+
+exe_data %>% 
+  ggplot(aes(x = Bwt, y = Hwt, shape = Sex,color = Sex)) + 
+  geom_point() +    # for color or shape that is not a variable, try put in geom_point;
+  theme_bw() +
+  #geom_abline(intercept = -0.3567 , slope = 4.0341)   
+  geom_abline(intercept = exe_model1$coefficients[1], slope = exe_model1$coefficients[2])
+
+
+```
+
+```{r}
+
+# modeling 2
+
+fitted_Hwt <- predict (exe_model1, newdata = exe_data, se.fit = TRUE, interval = "confidence", level = 0.95)
+
+fitted_Hwt$fit. # in this part, the first colume is what we want
+exe_data <- exe_data  %>% mutate(
+  fit_Hwt = fitted_Hwt$fit[,1]  # first colume 
+)  # fitted(exe_model1) is an alternative
+
+
+newdata <- data.frame(Bwt = c(5,6,7)) 
+predict (exe_model1, newdata = newdata, se.fit = TRUE, interval = "confidence", level = 0.95)
+
+
+df_fitted_resid <- data_frame(var1 = fitted(exe_model1),var2= resid(exe_model1))
+df_fitted_resid
+
+plot(exe_model1)
+
+exe_model2 <- lm(Hwt ~ Bwt + Sex, data = exe_data) 
+tidy(exe_model2,conf.int = TRUE)
+AIC(exe_model1,exe_model2)
+anova(exe_model1,exe_model2)
+
+exe_model3 <- lm(Hwt ~ Bwt * Sex, data = exe_data) 
+tidy(exe_model3,conf.int = TRUE)
+
+AIC(exe_model1,exe_model2,exe_model3)
+anova(exe_model3,exe_model1,exe_model2) # same conclusion drawn
+anova(exe_model1,exe_model2,exe_model3) 
+
+
+```
+
+```{r}
+plot(exe_model1)
+plot(exe_model2)
+plot(exe_model3)
+```
+
+
+
+
+
+

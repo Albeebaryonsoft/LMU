@@ -48,134 +48,384 @@ other ML methods: naive bayes, decision tree, linear SVM, nearest neighbors
 How does the use of hard drug effect asthma among US citizens? 
 Confounder: Age, SCS - income, education, work status; smoking and cannabis
 
+```{r}
+library(conflicted)
+library(tidyverse)
+library(magrittr)
+library(readr)
+library(ggplot2)
+library(gtsummary)
+library(boot)
+library(MASS)
+library(broom)
+
+conflicts_prefer(
+  dplyr::filter(),
+  dplyr::select()
+)
+
+```
 
 ## Data Exploration
 ```{r}
+
+# 3.2.1
 library(readr)
 df <- read_delim("../../data/NHANES1.csv", delim = ";")
 
-
-# dimensions, variable names, classes, and distributions, missing values. 
+# 3.2.2 
 dim(df)
-head(df)
 colnames(df)
+head(df)
 df %>% map(class)
-summary(df) 
-
-# variables like smoking status has the most missing value, but they are not real missing value.
-```
+summary(df)
 
 
-```{r}
-df %>% 
-  ggplot(aes(x = asthma_ever)) + 
-  geom_bar() +
-  theme_bw() 
+df %>%
+  select(asthma_ever, asthma_now, harddrg_ever) %>%
+  tbl_summary()
 
-df %>% 
-  ggplot(aes(x = asthma_now)) + 
-  geom_bar() +
-  theme_bw() 
-
-df %>% 
-  ggplot(aes(x = harddrg_ever)) + 
-  geom_bar() +
-  theme_bw() 
-
-df %>% 
-  ggplot(aes(x = age)) + 
-  geom_histogram() 
-  theme_bw() 
-
-df %>% 
-  ggplot(aes(x = factor(increl))) +  
-  geom_bar() 
-  theme_bw() 
-  
-df %>% 
-  ggplot(aes(x = factor(educ))) +  
-  geom_bar() 
-  theme_bw() 
-
-df %>% 
-  ggplot(aes(x = factor(jobstat_lwk)))+ 
-  geom_bar() 
-  theme_bw() 
-  
 df %>% 
   ggplot(aes(x = factor(smokstat)))+
   geom_bar() 
+  theme_bw()
+  
+#ggplot(df) +
+# geom_bar(aes(x = factor(smokstat))) +
+# theme_bw()
+
+
+ggplot(df) +
+  geom_boxplot(aes(x = male, y = age, fill = male)) +
+  theme_bw()
+
+df %>% 
+  ggplot(aes(x = factor(increl), fill = increl)) +  
+  geom_bar() 
   theme_bw() 
   
 df %>% 
-  ggplot(aes(x = factor(cannab_ever)))+
+  ggplot(aes(x = factor(educ), fill = educ)) +  
+  geom_bar() 
+  theme_bw() 
+
+df %>% 
+  ggplot(aes(x = factor(jobstat_lwk), fill = jobstat_lwk ), alpha = 0.2)+ 
+  geom_bar() 
+  theme_bw() 
+  
+
+df %>% 
+  ggplot(aes(x = factor(cannab_ever), fill = cannab_ever))+
   geom_bar() 
   theme_bw()
 
-gtsummary::tbl_cross(df, row = asthma_ever, col = harddrg_ever, missing = "no")
+ggplot(df) +
+  geom_density(aes(x = bmi, fill = male), alpha = 0.5) +
+  theme_bw()
 
-df %>% select(asthma_ever, asthma_now) %>% plyr::count()
+ggplot(df) +
+  geom_density(aes(x = weight, fill = male), alpha = 0.5) +
+  theme_bw()
+
+ggplot(df) +
+  geom_density(aes(x = height, fill = male), alpha = 0.2) +
+  theme_bw()
+
+
+```
+
+Confounder: Age, SCS - income, education, work status; smoking and cannabis
+```{r}
+
+# 3.2.3
+summary(df) 
+df %>%
+  is.na() %>%
+  colSums() %>%
+  sort(decreasing = TRUE)
+
+df %>%
+  select(livdis_ever,livdis_now)%>%
+  plyr::count()
+
+df %>%
+  select(asthma_ever, asthma_now) %>%
+  plyr::count()
+
+# Only participants with `livdis_ever == TRUE` have a value for `livdis_now`. For all participants with `livdis_ever == FALSE`, `livdis_now` should be FALSE and not NA. Same for `asthma_now`.
+
+
+#3.2.5
+# my code
+df %>% gtsummary::tbl_cross( row = asthma_ever, col = harddrg_ever, missing = "no")
+
+# F.Foster's code : learn how to tbl_cross while rename the levels
+df %>%
+  select(harddrg_ever,asthma_ever) %>%
+  mutate(
+    harddrg_ever = factor(harddrg_ever,
+        levels = c(TRUE, FALSE),
+        labels = c("yes", "no")
+        ),
+  asthma_ever = factor(asthma_ever,
+        levels = c(TRUE, FALSE),
+        labels = c("yes","no")
+  ) ) %>%
+  tbl_cross(
+    row = harddrg_ever,
+    col = asthma_ever,
+    missing = "no"
+  )
+
+round((102 / 471) / (459 / 2457), 2) # calculate by hand
+
+install.packages("crosstable")
+library(crosstable)
+
+crosstable::crosstable(df,
+ cols = harddrg_ever,
+ by = asthma_ever,
+ showNA = "no",
+ percent_pattern = "{n}",
+ effect = T
+ ) %>%
+  crosstable::as_flextable()
 
 ```
 
 ## Data prparation
 ```{r}
 
-# as.factor for categorical variables
+# 3.3.1 back up
+df.old <- df %>%
+  set_colnames(paste0(colnames(.), ".old"))
+
+df <- df %>%
+  mutate(
+    male = factor(male, 
+      levels = c (FALSE, TRUE),
+      labels  = c("female", "male")
+      ), 
+    harddrg_ever = factor(harddrg_ever,
+      levels = c (FALSE, TRUE),
+      labels = c ("never", "ever")
+    ),
+    asthma_ever = factor(asthma_ever,
+      levels = c (FALSE, TRUE),
+      labels = c ("never", "ever")
+    )
+  )
+
+df %>% select(male, harddrg_ever,asthma_ever) %>% map(class)
+
+# compare the old variable with the new variable, check if factor is successful
+
+cbind(df.old, df) %>%
+  select(male.old,male) %>%
+  plyr:: count()
+
+cbind(df.old, df) %>%
+  select(harddrg_ever.old, harddrg_ever) %>%
+  plyr::count()
+
+cbind(df.old, df) %>%
+  select(asthma_ever.old, asthma_ever) %>%
+  plyr::count()
+
+rm(df.old) # remove back up if success
 
 
-df$increl <- as.factor(df$increl)
-df$educ <- as.factor(df$educ)
-df$jobstat_lwk <- as.factor(df$jobstat_lwk)
-df$smokstat <-as.factor(df$smokstat)
-df$cannab_ever <-as.factor(df$cannab_ever)
-df$male <- as.factor(df$male)
 
-df$asthma_ever <- as.factor(df$asthma_ever)
-df$asthma_now <- as.factor(df$asthma_now)
-df$harddrg_ever <- as.factor(df$harddrg_ever)
+## 3.3.2
+# Adjust `asthma_now` based on your result from task 3.2.3. It will be the
+# outcome of our regression.
 
-class(df$asthma_ever)
+df %>% 
+  select(asthma_ever, asthma_now) %>% 
+  plyr::count()
+# no current asthma should be: 313 + 4244 = 4557
+# current asthma should be: 426
+# NA should be: 13 + 4 = 17
+
+df.old <- df %>%
+  set_colnames(paste0(colnames(.), ".old"))
+
+#  %<>% 原地赋值管道！！！
+df %<>% 
+  mutate(asthma_now = case_when(
+  asthma_now == TRUE ~ 1,
+  asthma_now == FALSE ~ 0,
+  is.na(asthma_now) & asthma_ever == "never" ~ 0    
+))   # here we replace NA using FALSE, because people might only answer asthma_ever but not asthma_now. 
+
 class(df$asthma_now)
 
+cbind(df.old, df) %>%
+  select(asthma_now.old, asthma_ever, asthma_now) %>%
+  plyr::count()
+# check if successfully corrected
 
-data <- df %>% mutate(asthma_now_adjusted = case_when(
-  is.na(asthma_now) & asthma_ever == FALSE ~ 0,    # here we replace NA using FALSE, because people might only answer asthma_ever but not asthma_now. 
-  asthma_now == FALSE ~ 0,
-  asthma_now == TRUE ~ 1
-),
-phq_sum = phq1 + phq2 + phq3 + phq4 + phq5 + phq6 + phq7 +phq8 + phq9,
-phq_average = (phq_sum - mean(phq_sum,na.rm = TRUE))/sd(phq_sum,na.rm = TRUE)
+df$asthma_now %>%
+  plyr::count()
+
+
+rm(df.old)
+
+## 3.3.3
+## Create the PHQ-9 sum score. Also create a standardised version. Check
+# afterwards if it worked.
+
+## 原地赋值管道
+
+df %<>%
+  rowwise () %>%
+  mutate(
+    phq_sum = sum(
+      phq1,phq2, phq3, phq4, phq5,phq6,phq7,phq8,phq9,
+      na.rm = FALSE
+    )
+  ) %>%
+  ungroup() # why?
+
+# check if successful
+df %>% 
+  select(phq1,phq2, phq3, phq4, phq5,phq6,phq7,phq8,phq9, phq_sum) %>%
+  plyr::count() %>%
+  view()
+
+df %<>% mutate(
+  phq_sum_std = (phq_sum - mean(phq_sum, na.rm = T))/ sd(phq_sum, na.rm = T)
 )
-# remember to remove na when calculate the standardised value
 
+df %>%
+  select(phq_sum, phq_sum_std) %>%
+  plyr :: count() %>%
+  head()   # use head () and view () to get an overview
+
+# Check afterwards if it worked. 
+mean(df$phq_sum, na.rm = TRUE) # 3.155804
+sd(df$phq_sum, na.rm = TRUE)  # 4.419932
 
 
 
 ```
 
 ## Modeling
+
 ```{r}
-summary(data$asthma_now_adjusted)
+# 3.4.1
+# Fit a logistic regression for outcome `asthma_now`. As your initial model,
+# fit the intercept-only model. How many individuals were excluded from the
+# analysis? Calculate the proportion of participants with `asthma_now` from the
+# estimated parameter.
 
-m0 <- glm(asthma_now_adjusted ~ 1, data = data, family = binomial(link = "logit"))
-dim(df)
-nobs(m0) 
+m0 <- glm(asthma_now ~ 1, data = data, family = binomial(link = "logit"))
+nrow(df) - nobs(m0) 
 summary(m0)  
-boot::inv.logit(m1$coefficients[1]) 
 
+boot::inv.logit(m0$coefficients[1]) 
+inv.logit(coef(m0))
+inv.logit(confint(m0))
 
-m1 <- glm(asthma_now_adjusted ~ harddrg_ever, data = data, family = binomial(link = "logit"))
-
+# 3.4.2
+m1 <- glm(asthma_now ~ harddrg_ever, data = df, family = binomial(link = "logit"))
 nobs(m1) # 3481
-summary(m1)
-boot::inv.logit(m1$coefficients[2]) 
-gtsummary::tbl_cross(data, row = asthma_now_adjusted, col = harddrg_ever, missing = "no")
+
+m1 %>% gtsummary::tbl_regression(exponentiate = T)
+# tbl_regression(m1, exponentiate = T)
 
 
-m2 <- glm(asthma_now_adjusted ~ harddrg_ever + age + increl + educ + jobstat_lwk + smokstat + cannab_ever + phq_average, data = data, family = binomial)
+df %<>%
+  mutate(smoke = case_when(
+    smokstat == 1 ~ "non-smoker",
+    smokstat == 2 ~ "smoker",
+    smokstat == 3 ~ "smoker"
+  ),
+  smoke = as.factor(smoke)
+  )
 
-m2 %>% tidy(conf.int = TRUE, exponentiate = TRUE)
+# check if successur
+
+class(df$smoke)
+
+df %>%
+  select(smokstat,smoke) %>%
+  plyr::count()
+
+
+m2 <- glm(asthma_now ~ harddrg_ever + male + age + smoke, data = df, family = binomial(link = "logit"))
+
+gtsummary::tbl_regression(m2,exponentiate = T)
+nobs(m2)
+tbl_regression(m2, exponentiate = T)
+
+#3.5.1
+AIC(m0,m1,m2)
+
+```
+
+
+```{r}
+
+## 3.5.2
+# Split the potential confounders, for which you were not certain that they are
+# potential confounders, into variable sets. Continue to modify your model by
+# including these variable sets as predictors. Follow the workflow: fit,
+# evaluate, compare, modify.
+
+
+m3 <- glm(asthma_now ~ harddrg_ever + male + age + smoke + phq_sum_std,
+  data = df, family = binomial(link = "logit")
+)
+summary(m3)
+nobs(m3)
+tbl_regression(m3, exponentiate = T)
+
+AIC(m2, m3)
+
+
+## 3.5.3
+# Compare point and interval estimate of `harddrg_ever` in a plot using
+# `geom_pointrange()`.
+
+est_m1 <- m1 %>%
+  tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+  mutate(
+    type = "Crude"
+  ) %>%
+  filter(term == "harddrg_everever")
+
+est_m2 <- m2 %>%
+  tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+  mutate(
+    type = "Adjusted (part)"
+  ) %>%
+  filter(term == "harddrg_everever")
+
+est_m3 <- m3 %>%
+  tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+  mutate(
+    type = "Adjusted (full)"
+  ) %>%
+  filter(term == "harddrg_everever")
+
+rbind(est_m1, est_m2, est_m3) %>%
+  mutate(type = as.factor(type)) %>%
+  ggplot() +
+  geom_pointrange(aes(
+    x = estimate,
+    xmin = conf.low,
+    xmax = conf.high,
+    y = type
+  )) +
+  geom_vline(aes(xintercept = 1), linetype = "dashed", color = "grey") +
+  theme_bw() +
+  theme_sub_axis_y(title = element_blank()) +
+  labs(x = "OR")
+
+# 3.5.4: models are not all fitted to the same number of observations
+
 
 ```
 

@@ -3,3 +3,198 @@ title: "Day 3"
 output: html_document
 ---
 
+#Logistic regression
+## Assumptions
+no assumption are made about the distribtuion of covariables, but should not be highly correlated. 
+Large sample sizes are required. The more covariables, the larger sampl size required. 
+Choice of model should always depend on biological or clinical considerations in addition to statistical results. 
+
+## How R does calculation 
+
+Distribution of P (Maximize Likelihood): S-shape curve of x-marker, y-proportion of deaths ranging from 0-1. 
+Derivatives should not be used to get Maximize Likelihood, because it might get a regional rather than the global Max. Instead, Iterative process should be used. 
+
+## Assessment of the fitted model
+
+**CI and tests (Wald test, LR test): **LR tests checks if the model increases the likelihood of obtaining the data compared to null model. 
+**Goodness of fit of the model:** Chi-square test checks how far the observed p of outcome is away from the expected p of outcome predicted by logistic regression. 
+**R square: ** Here, it is referred to as measures of effect size (how good exploratory variables are in predicting the outcome), not goodness of fit. 
+**Discrimination**: How well a model distinguishes patients who survive from who die (AUC).Similar to diagnosis. 
+
+**Validation:** How well the results will generalize to an independent data set. External validation is usually not feasible, but internal validation: **bootstrapping** (drawing samples with replacement, model may be developed in bootstrap samples and tested in the original sample), **cross-validation** (training set and testing set, performed over rounds; Brier score is used to estimate the prediction error). 
+
+**Residual Analysis** Deviance Residual determines if individual points are not fitted by the model; Partial residuals
+
+## Variable selection
+
+**Forward selection** Initial model does not include any covariables. It includes covariables that decrease AIC.
+**Backward selection** Initial model includes all covariables. It excludes covariables that decrease AIC.
+**Stepwise selection** 
+
+## polychotomous scale, continuous variable and interaction
+One-degree FP function, Two-degree FP function
+Quantitative interaction and Qualitative interaction
+
+# Classification: Random forest and maschine learning
+idea of underfitting, overfitting and trade off. 
+## Random forest
+many decision trees, and the final classification would be the mode of all results from trees. 
+other ML methods: naive bayes, decision tree, linear SVM, nearest neighbors
+
+
+#Exercise 3
+
+## Research Question:
+How does the use of hard drug effect asthma among US citizens? 
+Confounder: Age, SCS - income, education, work status; smoking and cannabis
+
+
+## Data Exploration
+```{r}
+library(readr)
+df <- read_delim("../../data/NHANES1.csv", delim = ";")
+
+
+# dimensions, variable names, classes, and distributions, missing values. 
+dim(df)
+head(df)
+colnames(df)
+df %>% map(class)
+summary(df) 
+
+# variables like smoking status has the most missing value, but they are not real missing value.
+```
+
+
+```{r}
+df %>% 
+  ggplot(aes(x = asthma_ever)) + 
+  geom_bar() +
+  theme_bw() 
+
+df %>% 
+  ggplot(aes(x = asthma_now)) + 
+  geom_bar() +
+  theme_bw() 
+
+df %>% 
+  ggplot(aes(x = harddrg_ever)) + 
+  geom_bar() +
+  theme_bw() 
+
+df %>% 
+  ggplot(aes(x = age)) + 
+  geom_histogram() 
+  theme_bw() 
+
+df %>% 
+  ggplot(aes(x = factor(increl))) +  
+  geom_bar() 
+  theme_bw() 
+  
+df %>% 
+  ggplot(aes(x = factor(educ))) +  
+  geom_bar() 
+  theme_bw() 
+
+df %>% 
+  ggplot(aes(x = factor(jobstat_lwk)))+ 
+  geom_bar() 
+  theme_bw() 
+  
+df %>% 
+  ggplot(aes(x = factor(smokstat)))+
+  geom_bar() 
+  theme_bw() 
+  
+df %>% 
+  ggplot(aes(x = factor(cannab_ever)))+
+  geom_bar() 
+  theme_bw()
+
+gtsummary::tbl_cross(df, row = asthma_ever, col = harddrg_ever, missing = "no")
+
+df %>% select(asthma_ever, asthma_now) %>% plyr::count()
+
+```
+
+## Data prparation
+```{r}
+
+# as.factor for categorical variables
+
+
+df$increl <- as.factor(df$increl)
+df$educ <- as.factor(df$educ)
+df$jobstat_lwk <- as.factor(df$jobstat_lwk)
+df$smokstat <-as.factor(df$smokstat)
+df$cannab_ever <-as.factor(df$cannab_ever)
+df$male <- as.factor(df$male)
+
+df$asthma_ever <- as.factor(df$asthma_ever)
+df$asthma_now <- as.factor(df$asthma_now)
+df$harddrg_ever <- as.factor(df$harddrg_ever)
+
+class(df$asthma_ever)
+class(df$asthma_now)
+
+
+data <- df %>% mutate(asthma_now_adjusted = case_when(
+  is.na(asthma_now) & asthma_ever == FALSE ~ 0,    # here we replace NA using FALSE, because people might only answer asthma_ever but not asthma_now. 
+  asthma_now == FALSE ~ 0,
+  asthma_now == TRUE ~ 1
+),
+phq_sum = phq1 + phq2 + phq3 + phq4 + phq5 + phq6 + phq7 +phq8 + phq9,
+phq_average = (phq_sum - mean(phq_sum,na.rm = TRUE))/sd(phq_sum,na.rm = TRUE)
+)
+# remember to remove na when calculate the standardised value
+
+
+
+
+```
+
+## Modeling
+```{r}
+summary(data$asthma_now_adjusted)
+
+m0 <- glm(asthma_now_adjusted ~ 1, data = data, family = binomial(link = "logit"))
+dim(df)
+nobs(m0) 
+summary(m0)  
+boot::inv.logit(m1$coefficients[1]) 
+
+
+m1 <- glm(asthma_now_adjusted ~ harddrg_ever, data = data, family = binomial(link = "logit"))
+
+nobs(m1) # 3481
+summary(m1)
+boot::inv.logit(m1$coefficients[2]) 
+gtsummary::tbl_cross(data, row = asthma_now_adjusted, col = harddrg_ever, missing = "no")
+
+
+m2 <- glm(asthma_now_adjusted ~ harddrg_ever + age + increl + educ + jobstat_lwk + smokstat + cannab_ever + phq_average, data = data, family = binomial)
+
+m2 %>% tidy(conf.int = TRUE, exponentiate = TRUE)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

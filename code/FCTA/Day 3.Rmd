@@ -4,9 +4,12 @@ output: html_document
 ---
 
 #Logistic regression
+
 ## Assumptions
-no assumption are made about the distribtuion of covariables, but should not be highly correlated. 
-Large sample sizes are required. The more covariables, the larger sampl size required. 
+The relationship between predictors and log-odds is linear. No errors. 
+The effect of a continuous variable x is constant for all values of x.
+No assumption are made about the distribtuion of covariables, but should not be highly correlated. 
+Large sample sizes are required. The more covariables, the larger sample size required. 
 Choice of model should always depend on biological or clinical considerations in addition to statistical results. 
 
 ## How R does calculation 
@@ -35,11 +38,13 @@ Derivatives should not be used to get Maximize Likelihood, because it might get 
 One-degree FP function, Two-degree FP function
 Quantitative interaction and Qualitative interaction
 
+
 # Classification: Random forest and maschine learning
 idea of underfitting, overfitting and trade off. 
 ## Random forest
 many decision trees, and the final classification would be the mode of all results from trees. 
 other ML methods: naive bayes, decision tree, linear SVM, nearest neighbors
+
 
 
 #Exercise 3
@@ -74,6 +79,8 @@ library(readr)
 df <- read_delim("../../data/NHANES1.csv", delim = ";")
 
 # 3.2.2 
+ncol(df)
+nrow(df)
 dim(df)
 colnames(df)
 head(df)
@@ -327,6 +334,8 @@ summary(m0)
 boot::inv.logit(m0$coefficients[1]) 
 inv.logit(coef(m0))
 inv.logit(confint(m0))
+
+
 
 # 3.4.2
 m1 <- glm(asthma_now ~ harddrg_ever, data = df, family = binomial(link = "logit"))

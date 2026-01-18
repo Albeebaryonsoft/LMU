@@ -1,0 +1,234 @@
+---
+title: "Day4"
+output: html_document
+---
+
+
+**Research Questions:**
+
+Is age related with having a history of cancer among American citizens?
+Is smoking related with having a history of cancer among American citizens?
+
+```{r}
+# 4.1
+
+library(conflicted)
+library(tidyverse)
+library(magrittr)
+library(readr)
+library(ggplot2)
+library(gtsummary)
+library(boot)
+library(MASS)
+library(broom)
+
+conflicts_prefer(
+  dplyr::filter(),
+  dplyr::select()
+)
+
+
+library(readr)
+# df <- read_delim("../../data/NHANES1.csv", delim = ";")
+
+df <- read_csv2("../../data/NHANES1.csv")
+
+df %>%
+  select(age, smokstat, cancer_ever) %>%
+  tbl_summary()
+
+df %>% 
+  ggplot(aes(x = factor(smokstat), y = age))+
+  geom_boxplot() 
+  theme_bw()
+  
+df %>% ggplot() +
+  geom_boxplot(aes(x = factor(cancer_ever), y = age, fill = cancer_ever)) +
+  theme_bw()
+
+df %>% gtsummary::tbl_cross( row = cancer_ever, col = smokstat, missing = "no")
+
+
+library(crosstable)
+
+crosstable::crosstable(df,
+ cols = smokstat,
+ by = cancer_ever,
+ showNA = "no",
+ percent_pattern = "{n}",
+ effect = T
+ ) %>%
+  crosstable::as_flextable()
+
+
+```
+
+
+```{r}
+
+df %>% 
+  select(cigsprd_prv30d, smokstat) %>% 
+  plyr::count()
+
+df %>% select(smokstat) %>% plyr::count()
+
+df <- df %>%
+  mutate(smoke_bin2 = case_when(
+    smokstat == 1 ~ "non-smoker",
+    smokstat == 2 ~ "smoker",
+    smokstat == 3 ~ "smoker",
+    !is.na(cigsprd_prv30d) & is.na(smokstat) ~ "smoker"
+  ),
+  smoke_bin2  = as.factor(smoke_bin2)
+  )
+
+df %>%
+  select(smoke_bin2) %>%
+  is.na() %>% plyr::count()
+
+
+df <- df %>%
+  mutate(age_bin2 = case_when(
+    age < 60 ~ "young",
+    age >= 60 ~ "old"
+  ),
+  age_bin2 = factor(age_bin2,
+                    levels = c ("young", "old")) # pay attention to the order
+  ) 
+
+df <- df %>%
+  mutate(smokstat_age = case_when(
+    smoke_bin2 == "non-smoker"& age_bin2 == "young" ~ "young non-smoker",
+    smoke_bin2 == "non-smoker"& age_bin2 == "old" ~ "old non-smoker",
+    smoke_bin2 == "smoker" & age_bin2 == "young" ~ "young smoker",
+    smoke_bin2 == "smoker"& age_bin2 == "old" ~ "old smoker",
+  ),
+  smokstat_age = factor(smokstat_age,
+                        levels = c("young non-smoker","old non-smoker", "young smoker","old smoker"))
+  )
+
+
+df %>% select(smoke_bin2, age, age_bin2,smokstat_age) %>% view()
+# make sure that all original variables are ok
+
+
+```
+
+```{r}
+
+m0 <- glm(cancer_ever ~ smoke_bin2 + age_bin2, data = df, family = binomial)
+
+m0 %>% gtsummary::tbl_regression(exponentiate = T)
+
+
+m1 <- glm(cancer_ever ~ smoke_bin2 + age_bin2 + smoke_bin2* age_bin2, data = df, family = binomial)
+summary(m1)
+nobs(m1)
+m1 %>% gtsummary::tbl_regression(exponentiate = T)
+
+
+# alternative way
+m2 <- glm(cancer_ever ~ smokstat_age, data = df, family = binomial)
+summary(m2)
+m2 %>% gtsummary::tbl_regression(exponentiate = T)
+
+# I did calculation manually, try codes?
+m3 <- glm(cancer_ever ~ smoke_bin2 + age + smoke_bin2* age, data = df, family = binomial)
+summary(m3)
+
+
+newdata <- data.frame(
+  age = c(70,25),
+  smoke_bin2 = c ("non-smoker","smoker")
+)
+
+predict (m3, newdata = newdata, se.fit = TRUE, interval = "confidence", level = 0.95)
+
+```
+
+
+Research Question: What is the relationship between weight and HDL?
+
+
+Data Exploration
+```{r}
+# non-linear function 
+# glm () and gam()
+
+df %>% 
+  select(hdl, weight) %>%
+  summary()
+
+df %>% 
+  ggplot()+
+  geom_density(aes(x = hdl), color = "blue") +
+  geom_density(aes(x = log(hdl)), color = "red") +
+  theme_bw()
+  
+df %>% 
+  ggplot(aes(x = weight, y = hdl))+
+  geom_smooth(method = lm) 
+  theme_bw()
+  
+df %>% 
+  ggplot(aes(x = weight, y = hdl))+
+  geom_smooth(method = loess) 
+  theme_bw()
+
+  
+class(df$hdl)
+class(df$weight)
+
+df <- df %>% mutate(hdl_log = log(hdl))
+
+# simply hdl and weight
+lm_mod <- lm(hdl ~ weight, data = df)
+summary(lm_mod)
+
+glm_mod <- glm(hdl ~ weight, data = df, family = gaussian())
+summary(glm_mod)
+
+gam_mod <- gam(hdl ~ s(weight), data = df, family = gaussian())
+summary(gam_mod)
+
+
+AIC(lm_mod,glm_mod,gam_mod)
+
+
+#using hdl_log
+lm_mod2<- lm(hdl_log ~ weight, data = df)
+summary(lm_mod2)
+
+glm_mod2 <- glm(hdl_log ~ weight, data = df, family = gaussian())
+summary(glm_mod2)
+
+gam_mod2 <- gam(hdl_log ~ s(weight, k= 500), sp = 90, data = df, family = gaussian())
+summary(gam_mod2) # play with k, aka number of knobs, or number of basis function
+
+
+AIC(lm_mod2,glm_mod2,gam_mod2)
+
+
+# using continuous age to predict cancer_ever
+
+glm_mod3 <- glm(cancer_ever ~ age, data = df, family = gaussian())
+summary(glm_mod3)
+
+gam_mod3 <- gam(cancer_ever ~ s(age), data = df, family = gaussian())
+summary(gam_mod3)
+gam_mod3$smooth[[1]]$bs.dim. # check the smoothing parameter, the min is the best given by R
+
+
+library(visreg)
+visreg(gam_mod)
+visreg(gam_mod2)
+visreg(gam_mod3)
+
+
+# the wiggliness
+gam_mod$sp
+gam_mod2$sp
+gam_mod3$sp
+
+```
+

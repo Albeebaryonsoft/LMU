@@ -232,7 +232,8 @@ Exercise: Descriptive
 install.packages("plyr")
 
 #1.6.1
-mpg %>% select(cty, hwy,fl) %>% 
+mpg %>% 
+  select(cty, hwy,fl) %>% 
   gtsummary::tbl_summary() # if pass to a df, df is a table rather than a dataframe
 
 #1.6.2
@@ -244,7 +245,9 @@ mpg %>% select(cty, hwy,fl, drv) %>%
 mpg$drv %>% plyr::count()
 
 #1.6.4
-mpg %>% select(drv, fl) %>% plyr::count()
+mpg %>% 
+  select(drv, fl) %>% 
+  plyr::count()
 
 ```
 

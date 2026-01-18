@@ -23,7 +23,7 @@ rstandard(model)
 
 # broom and tidy
 install.packages("broom")
-tidy(model, conf.int = TRUE) # create a tidy output
+tidy(model, conf.int = TRUE) # reate a tidy output
 model %>% tbl_regression() %>% add_n()
 
 

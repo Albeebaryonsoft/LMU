@@ -27,12 +27,22 @@ conflicts_prefer(
   dplyr::select()
 )
 
+```
+
+# Logistic Regression
+
+```{r}
 
 library(readr)
-# df <- read_delim("../../data/NHANES1.csv", delim = ";")
+# df <- read_delim("../../data/NHANES1.csv", delim = ";") # had problem, so switch to read_csv2
 
 df <- read_csv2("../../data/NHANES1.csv")
 
+```
+
+
+## Data Exploration
+```{r}
 df %>%
   select(age, smokstat, cancer_ever) %>%
   tbl_summary()
@@ -46,9 +56,11 @@ df %>% ggplot() +
   geom_boxplot(aes(x = factor(cancer_ever), y = age, fill = cancer_ever)) +
   theme_bw()
 
-df %>% gtsummary::tbl_cross( row = cancer_ever, col = smokstat, missing = "no")
+# method 1
+df %>% gtsummary::tbl_cross(row = cancer_ever, col = smokstat, missing = "no")
 
 
+# method 2
 library(crosstable)
 
 crosstable::crosstable(df,
@@ -60,100 +72,224 @@ crosstable::crosstable(df,
  ) %>%
   crosstable::as_flextable()
 
+# here we have OR < 1, could be reverse causation or survival bias.
 
 ```
 
-
+## Data Exploration
 ```{r}
+
+#4.3.1
+#Dichotomise variable `smokstat` with categories „non-smoker“ and „smoker“.Transform it into a factor. Check afterwards if it worked.
+
 
 df %>% 
   select(cigsprd_prv30d, smokstat) %>% 
   plyr::count()
 
-df %>% select(smokstat) %>% plyr::count()
-
+# 1 = no smoker and 2 = occational smokers, 3 = smokers
 df <- df %>%
   mutate(smoke_bin2 = case_when(
     smokstat == 1 ~ "non-smoker",
     smokstat == 2 ~ "smoker",
     smokstat == 3 ~ "smoker",
-    !is.na(cigsprd_prv30d) & is.na(smokstat) ~ "smoker"
+    !is.na(cigsprd_prv30d) & is.na(smokstat) ~ "smoker" 
+    # different from the solution, I added this line
   ),
   smoke_bin2  = as.factor(smoke_bin2)
   )
 
-df %>%
-  select(smoke_bin2) %>%
-  is.na() %>% plyr::count()
+class(df$smoke_bin2) # but i feel this is not always the right way to check if it worked. 
 
+
+df %>% 
+  select(cigsprd_prv30d, smokstat,smoke_bin2) %>% 
+  plyr::count()
+
+
+# 4.3.2
+# Dichotomise variable `age` with categories „<60 years“ and „≥60 years“. Transform it into a factor. Check afterwards if it worked.
 
 df <- df %>%
   mutate(age_bin2 = case_when(
-    age < 60 ~ "young",
-    age >= 60 ~ "old"
+    age < 60 ~ "<60",
+    age >= 60 ~ ">=60"
   ),
   age_bin2 = factor(age_bin2,
-                    levels = c ("young", "old")) # pay attention to the order
-  ) 
+                    levels = c ("<60",">=60" ) 
+  )) 
+# pay attention to the order of levels, otherwise different baseline group
+# levels are different from labels; once add labels, the value will be labels
+df %>%
+  select(age, age_bin2) %>%
+  plyr::count()
+
+## 4.3.3
+# From the dichotomised versions of `smokstat` and `age`, create a variable, that encodes their four different combinations, i.e., smoking+young, smoking+old, etc. Turn it into a factor. Check afterwards if it worked.
 
 df <- df %>%
   mutate(smokstat_age = case_when(
-    smoke_bin2 == "non-smoker"& age_bin2 == "young" ~ "young non-smoker",
-    smoke_bin2 == "non-smoker"& age_bin2 == "old" ~ "old non-smoker",
-    smoke_bin2 == "smoker" & age_bin2 == "young" ~ "young smoker",
-    smoke_bin2 == "smoker"& age_bin2 == "old" ~ "old smoker",
+    smoke_bin2 == "non-smoker"& age_bin2 == "<60" ~ "young non-smoker",
+    smoke_bin2 == "non-smoker"& age_bin2 == ">=60" ~ "old non-smoker",
+    smoke_bin2 == "smoker" & age_bin2 == "<60" ~ "young smoker",
+    smoke_bin2 == "smoker"& age_bin2 == ">=60" ~ "old smoker"
   ),
   smokstat_age = factor(smokstat_age,
-                        levels = c("young non-smoker","old non-smoker", "young smoker","old smoker"))
+        levels = c(
+          "young non-smoker","old non-smoker", "young smoker","old smoker"))
   )
 
+# level and label
 
-df %>% select(smoke_bin2, age, age_bin2,smokstat_age) %>% view()
-# make sure that all original variables are ok
+df %>% select(smoke_bin2, age_bin2,smokstat_age) %>%
+  plyr::count()
+
+
+```
+
+## Modeling - Initiation
+```{r}
+
+## 4.4.1
+# Fit and evaluate a logistic regression model for outcome `cancer_ever` and the dichotomised versions of `smokstat` and `age` as predictors. Interpret the model coefficients and write down your answer.
+
+m1 <- glm(cancer_ever ~ smoke_bin2 + age_bin2, 
+          data = df, family = binomial(link="logit"))
+
+summary(m1)
+m1 %>% gtsummary::tbl_regression(exponentiate = T)
+# in the output the outcome is separated, so use predict() to display all OR
+
+m1$xlevels$age_bin2  # check if the value of this variable in model
+predict(m1,
+  newdata = data.frame(
+    smoke_bin2 = c("non-smoker", "non-smoker", "smoker", "smoker"),
+    age_bin2 = c("<60", ">=60", "<60", ">=60")
+  ),
+  type = "response" # output is p - probability
+)
+
+# Interpretation:
+# Individuals who are 60 years or older have a 4.6 times higher odds of ever having cancer compared to individuals below 60 years of age. This translates into a 22.9% vs. 6.1% probability in non-smokers and a 14.1% vs. 3.4% probability in smokers. 
+
+```
+
+## Modeling 
+```{r}
+
+m2 <- glm(cancer_ever ~ smoke_bin2* age_bin2, data = df, family = binomial(link="logit"))
+
+# m2 <- glm(cancer_ever ~ smoke_bin2 + age_bin2 + smoke_bin2* age_bin2, data = df, family = binomial(link="logit"))，does not influence the outcome but not recommended
+
+summary(m2)
+nobs(m2)
+m2 %>% gtsummary::tbl_regression(exponentiate = T)
+
+newdata_m2 <-data.frame(
+    smoke_bin2 = c("non-smoker", "non-smoker", "smoker", "smoker"),
+    age_bin2 = c("<60", ">=60", "<60", ">=60"))
+
+newdata_m2$logodds <-predict(m2,newdata = newdata_m2,type = "link") # create logodds
+newdata_m2$odds <- exp(predict(m2,newdata = newdata_m2,type = "link"))
+newdata_m2$prob <-predict(m2,newdata = newdata_m2,type = "response")
+
+print(newdata_m2)
+
+# calculate OR
+
+or_smoke_in_young <- round(newdata_m2$odds[newdata_m2$smoke_bin2 == "smoker" & newdata_m2$age_bin2 == "<60"]/newdata_m2$odds[newdata_m2$smoke_bin2 == "non-smoker" & newdata_m2$age_bin2 == "<60"],2)
+
+
+or_smoke_in_old <- round(newdata_m2$odds[newdata_m2$smoke_bin2 == "smoker" & newdata_m2$age_bin2 == ">=60"]/newdata_m2$odds[newdata_m2$smoke_bin2 == "non-smoker" & newdata_m2$age_bin2 == ">=60"],2)
+
+or_age_in_smoker <- round(newdata_m2$odds[newdata_m2$smoke_bin2 == "smoker" & newdata_m2$age_bin2 == "<60"]/newdata_m2$odds[newdata_m2$smoke_bin2 == "smoker" & newdata_m2$age_bin2 == ">=60"],2)
+
+or_age_in_nonsmoker <- round(newdata_m2$odds[newdata_m2$smoke_bin2 == "non-smoker" & newdata_m2$age_bin2 == "<60"]/newdata_m2$odds[newdata_m2$smoke_bin2 == "non-smoker" & newdata_m2$age_bin2 == ">=60"],2)
+
+cbind(or_smoke_in_young, or_smoke_in_old, or_age_in_nonsmoker,or_age_in_smoker) 
+
+```
+
+## Modeling-Evaluation
+```{r}
+## 4.4.3
+# Look for a R package which provides the option to plot the coeffecients of multiple regression models side by side. Apply it to create a basic comparison of the previous two models.
+
+#install.packages("jtools")
+#install.packages("sjPlot")
+install.packages("visreg")
+
+
+jtools::plot_summs(m1,m2)
+sjPlot::plot_models(m1,m2)
+
+
+library("visreg")
+visreg(m1, scale = "response")
+# m1 without interaction, one image for each variable
+
+visreg(m2, "smoke_bin2", by = "age_bin2")
+# output is log-odds
 
 
 ```
 
 ```{r}
 
-m0 <- glm(cancer_ever ~ smoke_bin2 + age_bin2, data = df, family = binomial)
+## 4.5.1
+# Modify your model and only use the combined variable of the dichotomised versions of `smokstat` and `age`, i.e., with categories smoking+young, smoking+old, etc., as predictor. Fit and evaluate the model. Compare it with
+# the interaction model.
 
-m0 %>% gtsummary::tbl_regression(exponentiate = T)
+m3 <- glm(cancer_ever ~ smokstat_age, data = df, family = binomial(link = "logit"))
 
-
-m1 <- glm(cancer_ever ~ smoke_bin2 + age_bin2 + smoke_bin2* age_bin2, data = df, family = binomial)
-summary(m1)
-nobs(m1)
-m1 %>% gtsummary::tbl_regression(exponentiate = T)
+m3 %>% gtsummary::tbl_regression(exponentiate = T)
 
 
-# alternative way
-m2 <- glm(cancer_ever ~ smokstat_age, data = df, family = binomial)
-summary(m2)
-m2 %>% gtsummary::tbl_regression(exponentiate = T)
 
-# I did calculation manually, try codes?
-m3 <- glm(cancer_ever ~ smoke_bin2 + age + smoke_bin2* age, data = df, family = binomial)
-summary(m3)
+newdata_m3 <- data.frame(smokstat_age = c("young non-smoker", "old non-smoker","young smoker", "old smoker"))
+
+newdata_m3$logodds <- round(predict(m3, newdata = newdata_m3, type = "link"),2)
+newdata_m3$odds <- round(exp(predict(m3, newdata = newdata_m3, type = "link")),2)
+newdata_m3$prob <- round(predict(m3, newdata = newdata_m3, type = "response"),2)
+
+print(newdata_m3)
+print(newdata_m2) # identical results
 
 
-newdata <- data.frame(
+```
+
+
+```{r}
+
+m4 <- glm(cancer_ever ~ smoke_bin2 * age, data = df, family = binomial(link = "logit"))
+gtsummary::tbl_regression(m4, exponentiate = TRUE)
+
+
+newdata_m4 <- data.frame(
   age = c(70,25),
   smoke_bin2 = c ("non-smoker","smoker")
 )
 
-predict (m3, newdata = newdata, se.fit = TRUE, interval = "confidence", level = 0.95)
+newdata_m4$odds <- exp(predict (m4, newdata = newdata_m4, type = "link" ))
+newdata_m4$prob <- predict(m4, newdata = newdata_m4, type = "response" )
+
+print(newdata_m4)
+
+# the use of predict (), exp(), data.frame()
+
 
 ```
 
-
+# Generalized Additive Models
 Research Question: What is the relationship between weight and HDL?
 
 
-Data Exploration
+## Data Exploration
 ```{r}
-# non-linear function 
-# glm () and gam()
+
+# 4.8
+# Explore the distributions of HDL and weight. Also plot their relationship, including “lm” and “loess” smooths. Use `geom_smooth()` with the `method` argument.
+
 
 df %>% 
   select(hdl, weight) %>%
@@ -165,70 +301,188 @@ df %>%
   geom_density(aes(x = log(hdl)), color = "red") +
   theme_bw()
   
+# combine two images
 df %>% 
   ggplot(aes(x = weight, y = hdl))+
-  geom_smooth(method = lm) 
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = lm, color = "red") +
+  geom_smooth(method = loess, color = "blue") 
   theme_bw()
-  
-df %>% 
-  ggplot(aes(x = weight, y = hdl))+
-  geom_smooth(method = loess) 
-  theme_bw()
-
-  
-class(df$hdl)
-class(df$weight)
-
-df <- df %>% mutate(hdl_log = log(hdl))
-
-# simply hdl and weight
-lm_mod <- lm(hdl ~ weight, data = df)
-summary(lm_mod)
-
-glm_mod <- glm(hdl ~ weight, data = df, family = gaussian())
-summary(glm_mod)
-
-gam_mod <- gam(hdl ~ s(weight), data = df, family = gaussian())
-summary(gam_mod)
-
-
-AIC(lm_mod,glm_mod,gam_mod)
-
-
-#using hdl_log
-lm_mod2<- lm(hdl_log ~ weight, data = df)
-summary(lm_mod2)
-
-glm_mod2 <- glm(hdl_log ~ weight, data = df, family = gaussian())
-summary(glm_mod2)
-
-gam_mod2 <- gam(hdl_log ~ s(weight, k= 500), sp = 90, data = df, family = gaussian())
-summary(gam_mod2) # play with k, aka number of knobs, or number of basis function
-
-
-AIC(lm_mod2,glm_mod2,gam_mod2)
-
-
-# using continuous age to predict cancer_ever
-
-glm_mod3 <- glm(cancer_ever ~ age, data = df, family = gaussian())
-summary(glm_mod3)
-
-gam_mod3 <- gam(cancer_ever ~ s(age), data = df, family = gaussian())
-summary(gam_mod3)
-gam_mod3$smooth[[1]]$bs.dim. # check the smoothing parameter, the min is the best given by R
-
-
-library(visreg)
-visreg(gam_mod)
-visreg(gam_mod2)
-visreg(gam_mod3)
-
-
-# the wiggliness
-gam_mod$sp
-gam_mod2$sp
-gam_mod3$sp
 
 ```
 
+## Data Preparation
+
+```{r}
+# 4.9
+# Create the logarithm of HDL as new variable. Check afterwards if it worked.
+
+
+df <- df %>% mutate(hdl_log = log(hdl))
+
+df %>% 
+  select(hdl_log, hdl) %>% 
+  plyr::count() %>% 
+  head()
+# continuous variable
+
+```
+
+## Modeling
+
+```{r}
+## 4.10.1
+# initial model is linear and uses the non-logarithmic version of HDL. Fit and evaluate.
+
+lm_mod <- lm(hdl ~ weight, data = df)
+
+summary(lm_mod)                                       #output 1
+tidy(lm_mod, conf.int = TRUE)                         #output 2
+gtsummary::tbl_regression(lm_mod)                     #output 3
+gtsummary::tbl_regression(lm_mod,exponentiate = TRUE) #output 4
+
+
+visreg(lm_mod, gg = T, line = list(col="green")) +
+  stat_smooth(data = df, aes(x = weight, y = hdl_log), method = "loess", col = "red")
+  theme_classic()
+  
+  
+plot(lm_mod)  # assumption check
+
+lm_mod %>% 
+  simulate(nsim = 100) %>% 
+  pivot_longer(
+    cols = everything(),
+    names_to = "sim",
+    values_to = "val"
+  ) %>% 
+  ggplot() +
+  geom_density(aes(x = val, group = sim), color = "grey") +
+  geom_density(
+    data = df,
+    mapping = aes(x = hdl),
+    linewidth = 1
+  ) +
+  theme_bw()
+
+# the distribution of outcome is skewed, consider log transformation
+ggplot() + geom_density(data = df,mapping = aes(x = hdl))
+
+```
+
+
+
+```{r}
+## 4.10.2
+# Modify your model to include log(HDL) as outcome. Fit, evaluate, and compare.
+
+lm_mod_log <- lm(hdl_log ~ weight, data = df)
+
+visreg(lm_mod_log, gg = T, line = list(col="red")) +
+  stat_smooth(data = df, aes(x = weight, y = hdl_log), method = "loess", col = "green")
+  theme_classic()
+  
+# if method = "lm", the line will be exactly line = list(col = "red") 
+  
+```
+
+
+```{r}
+
+
+## 4.10.3
+# Modify your model to include a non-linear relationship with weight. Fit, evaluate, and compare the model. Look at the summary. How wiggly do you expect the smooth to be? Also plot the non-linear relationship (e.g., with package visreg).
+
+# install.packages("mgcv")
+library(mgcv)
+
+gam_mod_log <- gam(hdl_log ~ s(weight), data = df, family = gaussian())
+summary(gam_mod_log)
+# edf: 3.7 => relatively wiggly, but not extremely wiggly
+
+visreg(gam_mod_log, gg = T, line = list(col="red")) +
+  stat_smooth(data = df, aes(x = weight, y = hdl_log), method = "loess", col = "green")
+  theme_classic()
+
+gam_mod_log %>% 
+  simulate(nsim = 100) %>% 
+  pivot_longer(
+    cols = everything(),
+    names_to = "sim",
+    values_to = "val"
+  ) %>% 
+  ggplot() +
+  geom_density(aes(x = val, group = sim), color = "grey") +
+  geom_density(
+    data = df,
+    mapping = aes(x = hdl_log),
+    linewidth = 1
+  ) +
+  theme_bw()
+
+
+AIC(lm_mod,lm_mod_log,gam_mod_log)
+
+```
+
+
+```{r}
+# 4.10.4
+# Extract smoothing parameter and number of basis functions from your model.Try out different values for `sp` and `k` and see how the smooth changes.
+
+gam_mod_log$sp # smoothing parameter
+gam_mod_log$smooth[[1]]$bs.dim  # this is knobs , the k
+
+gam.check(gam_mod_log)
+# check if we need to adjust parameter after gam
+# The basis dimension check did not indicate undersmoothing (k-index = 1, p = 0.46), and the estimated edf (3.74) is well below k′ (9), suggesting that the chosen k is adequate.
+```
+
+```{r}
+
+
+gam_mod_log2a <- gam(hdl_log ~ s(weight, k= 3), data = df, family = gaussian())
+
+gam_mod_log2b <- gam(hdl_log ~ s(weight, k= 30), data = df, family = gaussian())
+
+gam_mod_log2c <- gam(hdl_log ~ s(weight), sp=0.01, data = df, family = gaussian())
+
+gam_mod_log2d <- gam(hdl_log ~ s(weight), data = df, sp = 100)
+
+visreg(gam_mod_log2a, gg = T) + theme_bw()
+
+visreg(gam_mod_log2b, gg = T) + theme_bw()
+# With high k, sp is larger to smooth it back to the optimal shape
+
+visreg(gam_mod_log2c, gg = T) + theme_bw()
+# With low sp, edf are higher ==> counter-acted by increased wiggliness
+
+visreg(gam_mod_log2d, gg = T) + theme_bw()
+# With high sp, the smooth is forced towards a straight line
+
+```
+
+
+```{r}
+
+# 4.10.5:  Fit a GAM for outcome `cancer_ever` with predictors smoking and age. Then modify your model to include different smooths of age for smokers and non-smokers. Plot your results.
+
+gam3 <- gam(cancer_ever ~ smoke_bin2 + s(age), data = df, family = binomial(link = "logit"))
+
+# family = Gaussian when the y is continuous, family = binomial(link = "logit") when y is binary; when family = binomial, glm = 直线版 logistic；gam = 曲线版 logistic
+
+visreg(gam_mod3, gg = T)
+
+# gam4 <- gam(cancer_ever ~ s(age, by = smoke_bin2), data = df, family = binomial(link = "logit"))
+
+gam4 <- gam(cancer_ever ~ smoke_bin2 + s(age, by = smoke_bin2), data = df, family = binomial())
+
+visreg(gam4, xvar = "age", by = "smoke_bin2", overlay = T)
+
+
+
+
+```
+“In the plot, the y-axis shows the smooth effect of age on the log-odds of ever having cancer (f(age)), with separate smooth curves for smokers (blue) and non-smokers (red); the shaded bands represent uncertainty (≈95% CI), and a separation or crossing of the curves indicates effect modification.
+
+The association between age and cancer prevalence differs by smoking status, indicating effect modification. In smokers the age effect appears weaker at older ages, whereas in non-smokers the predicted risk continues to increase, with the curves crossing around age ~60.

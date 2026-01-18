@@ -232,7 +232,7 @@ m1 %>% tbl_regression(intercept = TRUE)
 
 m1 %>% visreg("dist_km")
 
-simulate(m1, nsim = 100 ) %>% 
+simulate(m1, nsim = 100) %>% 
   pivot_longer(
     cols = everything(),
     names_to = "sim",

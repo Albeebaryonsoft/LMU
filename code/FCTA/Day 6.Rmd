@@ -1,0 +1,581 @@
+---
+title: "Day 6 Advanced poisson regression"
+output: html_document
+---
+
+1.Start with poisson
+2.Check overdispersion using plots
+3.Use following solutions if there is oversdispersion
+
+
+# Quasipoisson
+```{r}
+
+qm <- glm(Freq ~ Sat, data = MASS::housing, family = quasipoisson())
+
+summary(qm)
+summary(qm)$dispersion
+# (Dispersion parameter for quasipoisson family taken to be 12.65788)
+# The variance is 12.65788 times of mean. 
+
+AIC(qm) 
+# NA, cannot use AIC because the likelihood is not specified. 
+
+```
+
+
+# Negative-Binomial
+
+A combination of poisson and gamma distribution.
+Use gamma distribution to describe lambda, rather than using only one lambda.
+
+```{r}
+
+# MASS:: glm.nb()
+nb <- glm.nb(Freq ~ Sat, data = MASS::housing, link = log)
+AIC(nb)
+
+```
+
+# Zero-Inflated Poisson
+
+Add a binary indicator, which defines if an observation's count is 0 or follows Poisson. This binary indicator is estimated by logistic regression. 
+**Which count data variables with excess zero?**
+Times of using hard drug
+Number of birth
+
+```{r}
+# pscl::zeroinfl()
+# install.packages("pscl")
+
+zip <- pscl::zeroinfl(doctor ~ 1, data = Ecdat::Doctor, dist = "poisson" )
+summary(zip)
+
+broom.helpers::tidy_zeroinfl(zip)
+```
+
+# Zero-inflated Negative-Binomial Regression
+
+```{r}
+
+zip <- pscl::zeroinfl(doctor ~ 1, data = Ecdat::Doctor, dist = "negbin" )
+summary(zip)
+
+```
+
+# Live coding
+
+```{r}
+
+library(conflicted)
+library(tidyverse)
+library(magrittr)
+library(gtsummary)
+library(ggplot2)
+library(broom)
+library(broom.helpers)
+library(pscl)
+library(Ecdat)
+library(patchwork) # combine several plots
+
+conflicts_prefer(
+  dplyr::select(),
+  dplyr::filter()
+)
+conflict_scout() # check the conflicts
+
+d <- Ecdat::Doctor
+d%>% map(class)
+
+```
+## Data Exploration
+```{r}
+d %>% 
+  ggplot(aes(x = doctor)) + 
+  geom_histogram(binwidth = 1) + 
+  theme_bw()
+# zero access: many people don't go to the docter within a 4 month time frame.
+
+d %>% 
+  tbl_summary() 
+# no missing value
+
+d %<>%
+  mutate(
+    access_std = (access - mean(access))/sd(access)
+  )
+
+mean(d$access)
+sd(d$access)
+
+```
+
+## Modelling
+### Poisson
+```{r}
+m0 <- glm(doctor ~ 1, family = poisson(), data = d)
+summary(m0)
+
+# poisson
+m_po <- glm(doctor ~ health + access_std + children, data = d, family = poisson() )
+summary(m_po)
+nobs(m_po)
+
+#Use residual diagnostics for detection of outliers and influential data points
+plot(m_po)
+
+sim_po <- simulate(m_po, nsim = 5)
+cbind(d$doctor, sim_po) %>% View() #simulated data does not fit very well. 
+
+
+ggplot() +
+  geom_density(data = sim_po, aes(x = sim_1), color = "red")+
+  geom_density(data = sim_po, aes(x = sim_2), color = "green")+
+  geom_density(data = sim_po, aes(x = sim_3), color = "blue")+
+  geom_density(data = sim_po, aes(x = sim_4), color = "orange")+
+  geom_density(data = sim_po, aes(x = sim_5), color = "purple")+
+  geom_density(data = d, aes(x = doctor), linewidth = 1)+
+  theme_bw()
+
+
+# If there is overdispersion, the variance of real data should be larger than the data simulated by model. 
+
+plot_data_var <- data.frame(sim_var = sim_po %>% 
+  map(var) %>% 
+  unlist()) # A data frame should include a vector
+
+plot_data_var %>% 
+  ggplot() +
+  geom_histogram(aes(x = sim_var)) +
+  geom_vline(aes(xintercept = var(d$doctor) ), color = "red") +
+  theme_bw()
+
+plot_data_mean <- data.frame(sim_mean = sim_po %>% 
+  map(mean) %>% 
+  unlist()) # A data frame should include a vector
+
+plot_data_mean %>% 
+  ggplot() +
+  geom_histogram(aes(x = sim_mean)) +
+  geom_vline(aes(xintercept = mean(d$doctor) ), color = "green") +
+  theme_bw()
+
+# check access zero
+sum(sim_po$sim_1 == 0)
+sim_po %>%
+  equals(0) %>%
+  colSums()
+
+sum(d$doctor== 0) # more zeros than the simulated data
+
+plot_data_zeros <- data.frame(sim_zeros = 
+                              sim_po %>%
+                                equals(0) %>%
+                                colSums())
+
+plot_data_zeros %>%
+  ggplot()+
+  geom_histogram(aes(x = sim_zeros))+
+  geom_vline(aes(xintercept = sum(d$doctor==0) ), color = "blue") +
+  theme_bw()
+  
+# the plot tells us that the data from model contains more zeros than expected
+
+
+```
+
+### Quasipoisson
+```{r}
+
+m_qpo <- glm(doctor ~ health + access_std + children, data = d, family = quasipoisson())
+
+```
+
+
+### Negative Binomial
+```{r}
+
+m_nb <- glm.nb(doctor ~ health + access_std + children, data = d )
+summary(m_nb)
+
+jtools::plot_summs(m_po,m_nb, exp = TRUE)
+# the confidence interval of nb model is larger than the poisson model. 
+# The poisson estimates the variance too small, so corrected in nb model. 
+
+```
+
+### Zero-inflated
+```{r}
+
+m_zip <- zeroinfl(doctor ~ health + access_std + children, data = d, dist = "poisson")
+summary(m_zip)
+
+```
+
+### Zero-inflated negative-binomial regression
+```{r}
+# pscl::zeroinfl
+
+m_zipb <- zeroinfl(doctor ~ health + access_std + children, data = d, dist = "negbin")
+summary(m_zipb)
+
+```
+
+### Compare models
+```{r}
+
+AIC(m0, m_po,m_qpo, m_nb, m_zip, m_zipb)
+# not working by anova
+```
+
+
+# Exercise 6
+## Modeling
+### Poisson
+```{r}
+d1 <- MASS::quine
+
+m_po1 <- glm(Days ~ Eth + Sex + Age + Lrn, data = d1, family = poisson())
+tbl_regression(m_po1, exponentiate = TRUE)
+
+
+residual <- residuals(m_po1)
+plot(m_po1)
+d[104, ]
+d[72, ]
+d[59, ]
+
+
+m_po1  %>% 
+  simulate(nsim = 100) %>% 
+  pivot_longer(
+    cols = everything(),
+    names_to = "sim",
+    values_to = "val"
+  ) %>% 
+  ggplot() +
+  geom_density(aes(x = val, group = sim), color = "grey") + # color = sim, multiple colors
+  geom_density(
+    data = d1,
+    mapping = aes(x = Days),
+    linewidth = 1
+  ) +
+  theme_bw()
+# the fit is not very good so far
+
+sim_po1 <- simulate(m_po1, nsim = 100)
+# cbind(d$Days, sim_po1$sim_7) %>% View() 
+
+
+plot_data_var1 <- data.frame(sim_var1 = sim_po1 %>% 
+  map(var) %>% 
+  unlist()) # A data frame should include a vector
+
+plot_data_var1 %>% 
+  ggplot() +
+  geom_histogram(aes(x = sim_var1)) +
+  geom_vline(aes(xintercept = var(d1$Days) ), color = "red") +
+  theme_bw()
+
+
+```
+
+
+
+### Quasipoisson
+```{r}
+# Fit a quasipoisson model and extract the estimated dispersion parameter. What does the value mean?
+
+
+m_qpo1 <- glm(Days ~ Eth + Sex + Age + Lrn, data = d1, family = quasipoisson())
+summary(m_qpo1)
+summary(m_qpo1)$dispersion
+
+# (Dispersion parameter for quasipoisson family taken to be 13.16691)
+# 13.16691 - The variance is 13.16691 times of mean? 
+
+
+```
+
+### Negative Binomial
+
+```{r}
+
+m_nb1 <- glm.nb(Days ~ Eth + Sex + Age + Lrn, data = d1) # we don not assign value for family
+summary(m_nb1)
+m_nb1 %>% tbl_regression(exponentiate = TRUE)
+
+#Create 100 simulations of the distribution of number of absent school days based on the negative-binomial model and plot them together with the observed data. Compare the plot to the one from exercise 6.1.3.
+
+
+m_nb1  %>% 
+  simulate(nsim = 100) %>% 
+  pivot_longer(
+    cols = everything(),
+    names_to = "sim",
+    values_to = "val"
+  ) %>% 
+  ggplot() +
+  geom_density(aes(x = val, group = sim), color = "grey") + # color = sim, multiple colors
+  geom_density(
+    data = d1,
+    mapping = aes(x = Days),
+    linewidth = 1
+  ) +
+  theme_bw()
+
+
+```
+
+
+```{r}
+
+sim_po2 <- simulate(m_nb, nsim = 100)
+plot_data_var2 <- data.frame(sim_var2 = sim_po2 %>% 
+  map(var) %>%  # map applys to every variable. 
+  unlist())     # A data frame should include a vector.
+
+plot_data_var2 %>% 
+  ggplot() +
+  geom_histogram(aes(x = sim_var2)) +
+  geom_vline(aes(xintercept = var(d$Days) ), color = "red") +
+  theme_bw()
+
+
+```
+
+Compare models
+```{r}
+AIC(m_po1, m_nb1)
+
+# negative binomial distribution has the better fit. 
+
+```
+
+
+### Zero-inflated negative-binomial regression
+```{r}
+
+m_zipb1 <- zeroinfl(Days ~ Eth + Sex + Age + Lrn, data = d1, dist = "negbin")
+summary(m_zipb1)
+broom.helpers::tidy_zeroinfl(m_zipb1, exponentiate = TRUE) 
+# same result, we do not use tbl_regression, not suitable for this. 
+
+
+AIC(m_po1, m_nb1,m_zipb1)
+
+
+# This Zero-inflated negative-binomial regression does not improve the fit.
+```
+
+### Zero-inflated binomial
+```{r}
+m_zipp1 <- zeroinfl(Days ~ Eth + Sex + Age + Lrn, data = d1, dist = "poisson")
+
+AIC(m_po1, m_nb1,m_zipb1,m_zipp1 )
+
+# not better than m_zipb1
+```
+
+Research Question:
+1. Does ethnic background, sex, age and Learner status affect the days absent from schools in the year?
+
+Interpretation: Compared to female, male have 18% more days of absence from school. This effect is not significant.
+
+
+# Freestyle: OPF “Demand for Medical Care by the Elderly."
+
+**Outcome group: **
+ofp, ofnp, opp, opnp, emr, hosp ("number of ... ", count data variable)
+
+**Predictor group: **
+numchron, adldiff, age, black, sex, maried, school, faminc, employed, privins, medicaid, region, hlth
+
+**Research Question**
+How does all predictors effect the number of hospitalizations (aka. demand for Medical Care)?
+
+
+## Data Exploration
+```{r}
+
+d2 <- Ecdat::OFP
+
+view(d2)
+nrow(d2)
+ncol(d2)
+dim(d2)
+
+d2 %>% tbl_summary()
+
+d2 %>%
+  is.na() %>%
+  colSums() %>%
+  sort(decreasing = TRUE)
+
+d2 %>% map(class)
+
+# perfect data, no missing value, perfect data type
+# no Data Preparation needed for this case
+```
+
+## Modeling
+### Poisson
+
+```{r}
+
+
+m_po2 <- glm(hosp ~ numchron + adldiff + age + black + sex + maried + school + faminc + employed + privins + medicaid + region + hlth, data = d2, family = poisson())
+
+tbl_regression(m_po2, exponentiate = TRUE)
+
+# numchron: number of chronic conditions
+# adldiff: the person has a condition that limits activities of daily living ?
+# school: number of years of education
+# privins: is the person covered by private health insurance?
+# medicaid : is the person covered by medicaid ?
+# hlth: self-perceived health (excellent, poor, other)
+
+plot(m_po2)
+
+m_po2  %>% 
+  simulate(nsim = 100) %>% 
+  pivot_longer(
+    cols = everything(),
+    names_to = "sim",
+    values_to = "val"
+  ) %>% 
+  ggplot() +
+  geom_density(aes(x = val, group = sim), color = "grey") + # color = sim, multiple colors
+  geom_density(
+    data = d2,
+    mapping = aes(x = hosp),
+    linewidth = 1
+  ) +
+  theme_bw()
+# the poisson fits relativly well, but let's see if there is better option
+
+sim_po2 <- simulate(m_po2, nsim = 100)
+# cbind(d$Days, sim_po1$sim_7) %>% View() 
+
+
+plot_data_var2 <- data.frame(sim_var2 = sim_po2 %>% 
+  map(var) %>% 
+  unlist()) 
+
+plot_data_var2 %>% 
+  ggplot() +
+  geom_histogram(aes(x = sim_var2)) +
+  geom_vline(aes(xintercept = var(d2$hosp) ), color = "red") +
+  theme_bw()
+
+# the variance simulated data is far away from the real data
+
+
+plot_data_zeros2 <- data.frame(sim_zeros2 = 
+                               sim_po2 %>%
+                               equals(0) %>%
+                               colSums())
+
+plot_data_zeros2 %>%
+  ggplot()+
+  geom_histogram(aes(x = sim_zeros2))+
+  geom_vline(aes(xintercept = sum(d2$hosp==0) ), color = "blue") +
+  theme_bw()
+
+# more zeros in reality than in the simulated data. 
+
+```
+
+### Quasipoisson
+```{r}
+
+m_qpo2 <- glm(hosp ~ numchron + adldiff + age + black + sex + maried + school + faminc + employed + privins + medicaid + region + hlth, data = d2, family = quasipoisson())
+
+summary(m_qpo2)
+summary(m_qpo2)$dispersion
+
+
+# (Dispersion parameter for quasipoisson family taken to be 1.589551)
+# variance is only 1.589 times of the mean. They are not very different from each other
+# No need to correct the modal by making it more complex.
+```
+
+
+### Negative Binomial
+```{r}
+
+m_nb2 <- glm.nb(hosp ~ numchron + adldiff + age + black + sex + maried + school + faminc + employed + privins + medicaid + region + hlth, data = d2)
+
+AIC(m_po2, m_nb2)
+
+
+m_nb2  %>% 
+  simulate(nsim = 100) %>% 
+  pivot_longer(
+    cols = everything(),
+    names_to = "sim",
+    values_to = "val"
+  ) %>% 
+  ggplot() +
+  geom_density(aes(x = val, group = sim), color = "grey") + # color = sim, multiple colors
+  geom_density(
+    data = d2,
+    mapping = aes(x = hosp),
+    linewidth = 1
+  ) +
+  theme_bw()
+
+# the poisson fits relatively well, but let's see if there is better option
+
+sim_nb2 <- simulate(m_nb2, nsim = 100)
+# cbind(d$Days, sim_po1$sim_7) %>% View() 
+
+
+plot_data_var2 <- data.frame(sim_var2 = sim_nb2 %>% 
+  map(var) %>% 
+  unlist()) 
+
+plot_data_var2 %>% 
+  ggplot() +
+  geom_histogram(aes(x = sim_var2)) +
+  geom_vline(aes(xintercept = var(d2$hosp) ), color = "red") +
+  theme_bw()
+
+jtools::plot_summs(m_po2,m_nb2, exp = TRUE)
+```
+
+### Zero-inflated negative-binomial regression
+
+```{r}
+
+m_zipb2 <- zeroinfl(hosp ~ numchron + adldiff + age + black + sex + maried + school + faminc + employed + privins + medicaid + region + hlth + , data = d2, dist = "negbin")
+
+AIC(m_po2, m_nb2, m_zipb2)
+
+
+
+
+# This last model is the best! 
+
+
+```
+
+```{r}
+
+summary(m_zipb2)
+broom.helpers::tidy_zeroinfl(m_zipb2, exponentiate = TRUE) 
+
+```
+
+
+### Zero-inflated poisson
+```{r}
+
+m_zipp2 <- zeroinfl(hosp ~ numchron + adldiff + age + black + sex + maried + school + faminc + employed + privins + medicaid + region + hlth, data = d2, dist = "poisson")
+
+AIC(m_po2, m_nb2, m_zipb2, m_zipp2)
+
+# This is not better than m_zipb2
+
+```
+

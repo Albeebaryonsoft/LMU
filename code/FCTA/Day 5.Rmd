@@ -1,0 +1,411 @@
+---
+title: "Day 5"
+output: html_document
+---
+
+```{r}
+dbinom(x = 1, size=4, prob = 1/6)
+dpois(x = 0:100, lambda = 4/6)
+# assume mean and variance is equal, we can then use poisson distribution.
+
+k1 <- 0:20
+prob1 <- dbinom(x = k, size=20, prob = 1/6)
+prob2 <- dpois(x = 0:10, lambda = 4/6)
+
+barplot(prob)
+ggplot() + geom_col(aes(x= factor(k1), y=prob1))
+ggplot() + geom_col(aes(x= 0:10, y=prob2))
+
+# Poisson exp(beta): ratio of counts 
+# Logit exp(beta): odds ratio
+```
+```{r}
+m <- glm(formular = y ~ trt, family = poisson(), data = epil2)
+predict(m, newdata = newdata, type = "response")
+
+
+# among patients who receive treatment the number of seizures is only 92% of that among patients who receive placebo. 
+
+exp(-0.08663)
+exp(2.23614)
+exp(2.23614-0.08663)
+
+exp(0.353896 + 0.152680 + 0.084207 *3 + 0* - 0.274 + 2* -0.1599 + -0.008054 * 0 * 2)
+# The predicted number of articles for a married man with 2 childern and a department score of 3
+
+```
+
+Live Analysis
+
+# Import data
+```{r}
+
+# health status > doctor visit? 
+#install.packages("AER")
+#library(AER)
+
+library(conflicted)
+library(tidyverse)
+library(magrittr)
+library(gtsummary)
+library(ggplot2)
+library(broom)
+
+install.packages("Ecdat")
+library(Ecdat)
+
+d <- Ecdat::Doctor
+view(d)
+
+
+```
+
+# Data Exploration
+
+```{r}
+
+d %>% 
+  ggplot(aes(x = doctor))+ 
+  geom_histogram(binwidth = 1) + 
+  theme_bw()
+
+d %>% tbl_summary() # check missing value, no missing
+
+
+
+```
+# Data Preparation
+
+```{r}
+
+d %<>% 
+  mutate( access_std = (access - mean(access)) / sd(access) )
+
+mean(d$access)
+sd(d$access)
+
+d %>% 
+  select(access, access_std) %>% 
+  head()
+
+d %>%
+  ggplot(aes(x = health)) +
+  geom_density()+
+  geom_vline(aes(xintercept = mean(health), color = "red"))+
+  geom_vline(aes(xintercept = mean(health)+ sd(health), color = "blue"))+
+  geom_vline(aes(xintercept = median(health), color = "green"))+
+  theme_bw()
+
+# 
+```
+# Modeling
+## modeling m0
+
+```{r}
+
+m0 <- glm(doctor ~ 1, data = d, family = poisson() )
+
+summary(m0)
+exp(0.47643) # a fair number
+
+m0 %>% 
+  simulate(nsim = 100) %>% 
+  pivot_longer(
+    cols = everything(),
+    names_to = "sim",
+    values_to = "val"
+  ) %>% 
+  ggplot() +
+  geom_density(aes(x = val, group = sim), color = "grey") +
+  geom_density(
+    data = d,
+    mapping = aes(x = doctor),
+    linewidth = 1
+  ) +
+  theme_bw()
+
+# use it as a template
+# m0 does not really fit well. 
+
+```
+## modeling m1
+```{r}
+
+m1 <- glm(doctor ~ health, data = d, family = poisson() )
+summary(m1)
+nobs(m1)
+exp(5.176-4.841)
+
+m1 %>% 
+  tbl_regression(exponentiate = TRUE)
+
+# people who are less health go the the doctor more often. 
+
+visreg(m1, "health", scale = "response") 
+
+# we want counts, we set scale = "response"
+
+a <- mean(d$health)
+b <- mean(d$health) + sd(d$health) 
+# because we dont know what does health mean, so use these two instead
+# maybe median would be another interesting option, see geom_vline
+
+new <- data.frame(
+  health = c (a , b))
+
+predict(m1, newdata = new, type = "response")
+
+
+
+```
+```{r}
+
+m2 <- glm(doctor ~ health + access_std + children, data = d, family = poisson() )
+summary(m2)
+nobs(m2)
+
+# second table fallacy !!
+
+m2 %>% 
+  tbl_regression(exponentiate = TRUE)
+
+jtools::plot_summs(m1,m2, exp = TRUE)
+
+
+```
+
+# Exercise 5
+
+Research Question: how does district, group age of the insurer affect number of claims?
+
+## Data Exploration
+```{r}
+
+library(MASS)
+
+d <- MASS::Insurance
+
+# each row is one group of insured person.
+
+class(d$Group)
+class(d$Age)
+class(d$District)
+
+class(d$Claims) # number of claims
+class(d$Holders) # number of plicyholders
+
+d %>% ggplot() +
+  geom_histogram(aes(x = Claims), bins = 50)+
+  theme_bw()
+
+d %>% ggplot() +
+  geom_histogram(aes(x = Holders), bins = 50)+
+  theme_bw()
+
+d %>% select(Claims, District) %>% tbl_summary() 
+```
+
+## Data Preparation
+
+```{r}
+
+# no missing value, already checked
+
+d %<>% mutate(District_bin = case_when(
+  District == 4 ~ "major_cities",
+  District == 3  ~ "smaller_than_major_cities",
+  District == 2  ~ "smaller_than_major_cities",
+  District == 1  ~ "smaller_than_major_cities",
+),
+ District_bin = factor(District_bin, levels = c("smaller_than_major_cities","major_cities" ))
+)
+
+
+d%>% select(District, District_bin) %>%
+   plyr::count()
+
+d %<>% 
+  mutate(Rate_per100 = Claims*100/Holders) # number of claims per 100 holders
+
+
+d %>% 
+  ggplot() + 
+  geom_boxplot(aes(x = as.factor(District), y=Rate_per100), col = "red")+
+  theme_bw()
+
+d %>% 
+  ggplot() + 
+  geom_boxplot(aes(x = as.factor(Age), y=Rate_per100), col = "blue") + 
+  theme_bw()
+
+d %>% 
+  ggplot() + 
+  geom_boxplot(aes(x = as.factor(Group), y=Rate_per100), col = "green") + 
+  theme_bw()
+
+
+             
+# negative association - size of district and group
+# positive association - age
+```
+
+# Modeling
+
+```{r}
+
+m0 <- glm(Claims ~ District + Group + Age, data = d , family = poisson())
+
+m0 %>% tbl_regression(exponentiate = TRUE)
+
+
+
+d %<>% mutate(Holders_100 = Holders/100) 
+m1 <- glm(Claims ~ District + Group + Age + offset(log(Holders_100)), data = d , family = poisson())
+
+# if the intercept is quite small, than use Holder/100 to minimize the effect
+exp(m1$coefficients[1])
+
+m1 %>% tbl_regression(exponentiate = TRUE)
+summary(m1)
+# The coefficients look weird. The reason is that both are ordered factors and by default they use a different contrast.
+
+m2 <- glm(Claims ~ District + Group + Age + offset(log(Holders_100)), data = d , family = poisson(), contrasts = list(Group = "contr.treatment", Age = "contr.treatment"))
+
+m2 %>% tbl_regression(exponentiate = TRUE)
+# use contrasts = list(Group = "contr.treatment", Age = "contr.treatment") to fix the weird coefficients.
+
+
+m2 %>% 
+  simulate(nsim = 100) %>% 
+  pivot_longer(
+    cols = everything(),
+    names_to = "sim",
+    values_to = "val"
+  ) %>% 
+  ggplot() +
+  geom_density(aes(x = val, group = sim), color = "grey") +
+  geom_density(
+    data = d,
+    mapping = aes(x = Claims),
+    linewidth = 1
+  ) +
+  theme_bw()
+
+
+
+```
+
+
+# Freestyle Exercise
+
+
+Research question:  1. Does ethnic background, sex, age and Learner status affect the days absent from schools in the year?  2. Does ethnic background, sex, age and Absence from school affect the learner status?
+
+
+# Data exploration
+```{r}
+
+d2 <- MASS::quine
+
+d2 %>% map(class)
+
+d2 %>% 
+  select(Eth, Sex, Age, Lrn) %>%
+  tbl_summary()
+
+
+d2 %>% ggplot() +
+  geom_density(aes(x = Days, fill = Sex), alpha = 0.5) +
+  theme_bw()
+
+d2 %>% ggplot() +
+  geom_density(aes(x = Days, fill = Eth), alpha = 0.5) +
+  theme_bw()
+
+d2 %>% ggplot() +
+  geom_density(aes(x = Days, fill = Age), alpha = 0.5) +
+  theme_bw()
+
+d2 %>% ggplot(aes(x = Lrn, fill = Age)) +
+  geom_bar() +
+  theme_bw()
+
+d2 %>% ggplot(aes(x = Lrn, fill = Eth)) +
+  geom_bar() +
+  theme_bw()
+
+d2 %>% ggplot(aes(x = Lrn, fill = Sex)) +
+  geom_bar() +
+  theme_bw()
+
+d2 %>% ggplot(aes(x = Lrn, fill = Eth)) +
+  geom_bar() +
+  theme_bw()
+
+d2 %>% ggplot() + 
+  geom_boxplot(aes(x = Lrn, y = Days, fill = Lrn))+
+  theme_bw()
+
+
+```
+# Data Preparation
+
+```{r}
+
+d2 %>%
+  mutate(
+    Eth = factor(Eth,
+        levels = c("A", "N"),
+        labels = c("Aboriginal", "Not")
+        ),
+   Sex = factor(Sex,
+        levels = c("F", "M"),
+        labels = c("Female","Male")
+  ),
+  Lrn = factor(Lrn,
+       levels = c("AL","SL"),
+       labels = c("Average learner","Slow learner")
+  ))
+  
+```
+
+# Modeling
+
+1. Does ethnic background, sex, age and Learner status affect the days absent from schools in the year?  
+```{r}
+
+# Question 1
+
+model_poi1 <- glm(Days ~ Eth + Sex + Age + Lrn, data = d2, family = poisson())
+tbl_regression(model_poi1, exponentiate = TRUE)
+# no offset term here, we assume that the observation time is equal
+
+model_poi2 <- glm(Days ~ Eth + Age + Lrn*Sex, data = d2, family = poisson())
+tbl_regression(model_poi2, exponentiate = TRUE)
+
+
+model_poi3 <- glm(Days ~ Eth*Age + Lrn*Sex, data = d2, family = poisson())
+tbl_regression(model_poi3, exponentiate = TRUE)
+
+
+AIC(model_poi1, model_poi2, model_poi3)
+anova(model_poi2, model_poi3)
+
+
+```
+
+2. Does ethnic background, sex, age and Absence from school affect the learner status?
+
+```{r}
+
+# Question 2
+model_glm <- glm(Lrn ~ Eth + Sex + Age + Days, data = d2, family = binomial(link = "logit"))
+tbl_regression(model_glm, exponentiate = TRUE)
+
+```
+
+
+
+
+
+

@@ -1,0 +1,258 @@
+---
+title: "Day 8"
+output: html_document
+---
+
+
+**Hazard** is the probability of death at time t -- this is only a density function, different from Hazard function. "Most of the people died at the age around 90."
+
+**Hazard function** measures the probability of death at time t, given that the individual survived up to time t. / The hazard is the risk of an event at time t, given the person is event-free before t. "But the risk of dying is increasing after 90."
+H(t) = - ln(S(t))
+
+In the **exponential survival** model, the hazard is assumed to be the constant over time. 
+S(t) = exp(-h*t)
+
+**Proportional Hazard model** is used for comparing groups/controlling for covariates. 
+Assumptions: 
+The Hazards Ratio remains constant, independent of time.
+The effects of covariates are constant over time. 
+(If the assumptions are violated, the cox model might not be the best.)
+
+Interpretation: 
+HR = 2.61: The risk of death is increased by a factor of 2.61. 
+
+Model Comparison:
+Can us AIC or partial F test. 
+
+# Aderson data
+```{r}
+
+library(survival)
+library(survminer)
+library(ggplot2)
+library(MASS)
+library(gtsummary)
+library(dplyr)
+library(conflicted)
+library(readr)
+
+conflicts_prefer(
+  dplyr::select(),
+  dplyr::filter()
+)
+conflict_scout() # check the conflicts
+
+
+```
+
+## Data Exploration and Preparation
+```{r}
+
+d <- autoReg::anderson 
+?autoReg::anderson 
+d %<>% 
+  mutate(sex = case_when(
+  sex == "0" ~ "female",
+  sex == "1" ~ "male"
+),
+sex = factor(sex,
+  levels = c("female", "male")
+))
+
+d %<>% 
+  mutate(rx = case_when(
+  rx == "1" ~ "control",
+  rx == "0" ~ "treatment"
+),
+  rx = factor(rx, 
+    levels = c("control","treatment")
+    ))
+
+class(d$sex)
+m_cox <- coxph(Surv(time,status) ~ sex + rx + logWBC, data = d)
+m_cox$n
+m_cox$nevent
+summary(m_cox) # n= 42, number of events= 30 
+m_cox %>% tbl_regression(exponentiate = TRUE)
+
+
+```
+
+## Survival Analysis 
+```{r}
+
+
+# Check if there is a linear relation between log hazard and continuous predictors.
+# only one continuous predictor here logWBC
+
+# method 1
+ggcoxfunctional(Surv(time,status) ~ logWBC, data = d, ggtheme = theme_bw())
+
+# method 2
+data.frame(
+  resid = residuals(coxph(Surv(time, status) ~ 1, data = d),
+  type = "martingale"
+  ),
+  val = d$logWBC
+)%>%
+  ggplot(aes(x = val, y = resid)) +
+  geom_point() +
+  stat_smooth(method = "loess") +
+  theme_bw() +
+  ylim(-2, 2) +
+  ylab("Martingale Residuals \nof Null Cox Model") +
+  xlab("logWBC")
+
+
+# Evaluate if the proportional hazard assumption holds.
+ggcoxzph(cox.zph(m_cox))
+
+
+```
+
+
+## Visualisation
+```{r}
+
+# Plot the modeled survival curves together with Kaplan-Meier curves. 
+# Plot two curves each, representing treated and controls. 
+# Use the mean value of logWBC for the modelled curves. Create separate plots for men and women. 
+# Use argument subset = (sex == "male")` in survfit() to get sex-specific KM curves.
+
+# Create separate newdata for men and women
+newdata_male <- data.frame(
+  rx = c("control", "treatment"),
+  sex = rep("male", 2),
+  logWBC = rep(mean(d$logWBC), 2)
+)
+rownames(newdata_male) <- c("rx=0", "rx=1")
+
+newdata_female <- data.frame(
+  rx = c("control", "treatment"),
+  sex = rep("female", 2),
+  logWBC = rep(mean(d$logWBC), 2)
+)
+rownames(newdata_female) <- c("rx=0", "rx=1")
+
+# Create separate curves for men and women
+modelled_male <- survfit(m_cox, newdata = newdata_male, data = d)
+km_male <- survfit(Surv(time, status) ~ rx, data = d, subset = (sex == "male"))
+
+modelled_female <- survfit(m_cox, newdata = newdata_female, data = d)
+km_female <- survfit(Surv(time, status) ~ rx, data = d, subset = (sex == "female"))
+
+# Create separate plots for men and women
+plot_men <- ggsurvplot_combine(list(CoxPH = modelled_male, KM = km_male),
+  data = d, ggtheme = theme_bw()
+)
+plot_men$plot +
+  labs(title = "Men")
+
+plot_women <- ggsurvplot_combine(list(CoxPH = modelled_female, KM = km_female),
+  data = d, ggtheme = theme_bw()
+)
+plot_women$plot +
+  labs(title = "Women")
+
+
+```
+
+# Free style: nepal data
+
+Research Question: Do infants of teenage mother has a higher risk of death?
+
+## Data Exploration
+
+```{r}
+d2 <- read_delim("../../data/nepalDHS.csv", delim = ",") 
+d2 %>% tbl_summary()
+view(d2)
+
+```
+
+
+## Data Preparation
+```{r}
+# I recoded all variables just to keep myself focused. 
+d2 %<>% 
+  mutate(male = case_when(
+  Male == "1" ~ "male",
+  Male == "0" ~ "female"
+),
+male = factor(male,
+  levels = c("female", "male")
+))
+
+
+d2 %<>% 
+  mutate(urban = case_when(
+  Urban == "1" ~ "urban",
+  Urban == "0" ~ "rural"
+),
+ urban = factor(urban,
+  levels = c("urban", "rural")
+))
+
+
+d2 %<>% mutate(wealth = case_when(
+  Wealth == 1 ~ "poorest",
+  Wealth == 2 ~ "poor",
+  Wealth == 3 ~ "medium",
+  Wealth == 4 ~ "rich",
+  Wealth == 5 ~ "richest",
+), 
+wealth = factor(wealth, 
+                   levels = c("poorest","poor","medium", "rich","richest"))
+)
+
+
+d2 %<>% 
+  mutate(first = case_when(
+  First == "1" ~ "first born infant",
+  First == "0" ~ "not first born infant"
+),
+ first = factor(first,
+  levels = c("first born infant", "not first born infant")
+))
+
+
+d2 %<>% 
+  mutate(alive = case_when(
+  Alive == "1" ~ "alive",
+  Alive == "0" ~ "dead"
+),
+  alive = factor(alive, 
+    levels = c("alive","dead")
+    ))
+
+d2 %<>% 
+  mutate(first_dead = case_when(
+  FirstInfantDeath == "1" ~ "first infant death in family",
+  FirstInfantDeath == "0" ~ "subsequent infant death in family"
+),
+  first_dead = factor(first_dead, 
+    levels = c("first infant death in family","subsequent infant death in family")
+    ))
+
+
+d2 %<>%
+  mutate(motherage = case_when(
+    MotherAge < 20 ~ "<20y",
+    MotherAge >= 20 ~ ">=20y"
+  ),
+  motherage = factor(motherage,
+                     levels = c("<20y",">=20y")))
+
+
+view(d2)
+
+
+```
+
+## Survival Analysis
+
+```{r}
+
+
+```
+

@@ -1,0 +1,202 @@
+---
+title: "Day 7 Survival Analysis and Cox regression"
+output: html_document
+---
+
+*The standard error of KM is higher on the left-hand side of the curve because of smaller sample size. 
+
+*Survival distribution of different groups can be compared with the log-rank test. 
+
+*We do not only look at the risk of death at one specific time point (e.g., 1-year survival), but at all time points. Because, otherwise we will lose all the information. 
+
+* Survival function is 1-function of death (failure function). 
+
+* We look at medien survival but not mean survival, because mean is subjective to outliers (even if there is no censoring)
+
+* Outcome of interest = Time-to-event (measured in years, months, days, hours, etc.)
+
+* Time-to-event is numeric, positive, random variable. Normal distribution is less used because time-to-event is skewed. 
+
+*Right censoring, left censoring, interval censoring. Left cencoring may occur when we do not diagnose the cancer when it is there.
+
+* Summarising KM: 1-year survival, 5-year survival, median survival, Convidence Interval, of S(t) and medien survival 
+
+* The log-rank test is based on chi-square test: add together over all event times.
+
+
+```{r}
+library(survival)
+library(survminer)
+library(ggplot2)
+library(MASS)
+library(gtsummary)
+library(dplyr)
+library(conflicted)
+library(readr)
+
+conflicts_prefer(
+  dplyr::select(),
+  dplyr::filter()
+)
+conflict_scout() # check the conflicts
+
+install.packages("autoReg")
+
+
+d <- autoReg::anderson
+d %>% tbl_summary()
+class(d$time)
+view(d)
+# no missing value, no censoring, only alive and dead at the end of observation.
+
+d%<>% mutate(time = death - diag)
+d$time <- as.numeric(d$time)
+
+
+# overall survival 
+time_to_event <- Surv(time = d$time, event = d$status) # a few censored with +
+km <- survfit(time_to_event ~ 1, data = d)
+summary(km)
+print(km)
+
+km_plot <- ggsurvplot(km,
+                      data = d,
+                      linewidth = 0.5,
+                      surv.median.line = "hv",
+                      risk.table = TRUE,
+                      risk.table.height = 0.3,
+                      pval = TRUE,
+                      conf.int = TRUE,
+                      palette = c("#E69F00"),
+                      xlab = "Time(days)",
+                      ylab = "Survival probability",
+                      title = "KM Curve",
+                      ggtheme = theme_minimal())
+km_plot
+
+
+# survival by sex
+km_by_sex <- survfit(time_to_event ~ sex, data = d)
+summary(km_by_sex)
+
+survdiff(Surv(time, status) ~ sex, data = d)
+
+km_plot_by_sex <- ggsurvplot(km_by_sex,
+           data = d,
+           risk.table = TRUE, 
+           risk.table.height = 0.3,
+           pval = TRUE, 
+           conf.int = TRUE,        
+           legend.labs = c("Female", "Male"),
+           legend.title = "Sex",
+           palette = c("#E69F00","#56B4E9"), 
+           surv_median.line = "hv" , 
+           xlab = "Time (days)",
+           ylab = "Survival probability",
+           title = "Kaplan-Meier Survival Curve by Sex",
+           ggtheme = theme_minimal()) 
+
+km_plot_by_sex
+
+coxph(Surv(time, status) ~ sex, data=d) # HR = exp (coef) = 0.7333, the male has 0.733 decreased risk of dying. 
+
+
+#7.1.5
+
+km <- survfit(time_to_event ~ 1, data = d)
+# km$n.cercor is under km
+
+d1 <- data.frame(event_time = km$time,
+                 n_risk = km$n.risk, # people at risk
+                 n_death = km$n.event, # number of death
+                 n_remission = km$n.censor, # number of remission
+                 cum_survival = km$surv
+                 )
+d1 %<>% mutate(prob_death_noncum = n_death/n_risk,
+              prob_surv_point = 1-n_death/n_risk)
+
+d1
+
+cumprod(d1$prob_surv_point) # verified.
+
+
+```
+
+# Data nepalDHS
+```{r}
+
+d2 <- read_delim("../../data/nepalDHS.csv", delim = ",") 
+d2 %>% tbl_summary()
+
+# trap! recode the variable Alive
+d2 %<>% mutate(Status_Alive = case_when(Alive == 1 ~ 0,
+                                       Alive == 0 ~ 1))
+
+time_to_event_2 <- Surv(time = d2$time, event = d2$Status_Alive)
+
+km_nepal <- survfit(time_to_event_2 ~ 1, data = d2 )
+
+d2 %>% ggplot() + geom_histogram(aes(x=time))
+
+
+km_nepal_plot <- ggsurvplot(km_nepal,
+                      data = d2,
+                      linewidth = 0.5,
+                      surv.median.line = "hv",
+                      risk.table = TRUE,
+                      risk.table.height = 0.3,
+                      pval = TRUE,
+                      conf.int = TRUE,
+                      palette = c("#E69"),
+                      xlab = "Time(days)",
+                      ylab = "Survival probability",
+                      title = "KM Curve",
+                      ggtheme = theme_minimal())
+km_nepal_plot
+
+
+# break by Urban
+km_nepal_Urban <- survfit(time_to_event_2 ~ Urban, data = d2 )
+summary(km_nepal_Urban)
+
+km_nepal_plot_Urban <- ggsurvplot(km_nepal_Urban,
+           data = d2,
+           risk.table = TRUE, 
+           risk.table.height = 0.4,
+           pval = TRUE, 
+           conf.int = TRUE,        
+           legend.labs = c("Female", "Male"),
+           legend.title = "Sex",
+           palette = c("#E69F00","#56B4E9"), 
+           surv_median.line = "hv" , 
+           xlab = "Time (days)",
+           ylab = "Survival probability",
+           title = "Kaplan-Meier Survival Curve by Sex",
+           ggtheme = theme_minimal()) 
+
+km_nepal_plot_Urban
+
+
+
+```
+
+```{r}
+# 7.2.4: For the survival model with `FirstInfantDeath`
+
+# survival rates at 6 months after birth,
+# survival rates at 1 year after birth for each group.
+
+km_nepal_FirstInfantDeath <- survfit(time_to_event_2 ~ FirstInfantDeath, data = d2 )
+
+summary(km_nepal_FirstInfantDeath)
+# extract the median times
+
+
+km_nepal_FirstInfantDeath
+
+tbl_merge(list(
+  
+))
+
+```
+

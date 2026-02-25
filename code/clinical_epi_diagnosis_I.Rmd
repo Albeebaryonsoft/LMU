@@ -1,0 +1,191 @@
+---
+title: "clinical_epi_diagnosis_I"
+output: html_document
+---
+Between 1992 and 1997, 347 patients with metastatic renal carcinoma were randomised to enter the MRC RE01 trial comparing interferon-alpha (IFA, n=172, variable “group” =1) with medroxyprogesterone acetate (MPA, n=175, variable “group”=0) at 31 centres in the UK. Selected data were available for the following three potential baseline prognostic factors and the primary
+outcome: haemoglobin (variable “haem, g dl-1), WHO performance status (variable “who”, range from 0 to 5), time from diagnosis of metastasis to randomization (variable “t_mt”, days), and death (variable 'event', 0=alive and 1=death), respectively. In our exercise, we would like to investigate whether these potential prognostic factors recorded at baseline provide information on the likely outcome of the death in 347 patients.
+
+
+```{r}
+
+
+library(conflicted)
+library(tidyverse)
+library(magrittr)
+library(readr)
+library(ggplot2)
+library(gtsummary)
+library(boot)
+library(MASS)
+library(broom)
+
+conflicts_prefer(
+  dplyr::filter(),
+  dplyr::select()
+)
+
+# 1) import data
+
+# instead of foreign, gpt suggests us to use haven 
+
+install.packages("haven")
+library(haven)
+df<- read_dta("../data/EXERC_Ewers_mrcre.dta")
+
+
+```
+
+```{r}
+# 2) Describe the structure of dataset and all variables (except variable “ID”) in the dataset? Use e.g. str() , t able () , summary ().
+
+summary(df)
+
+df %>%
+  select(group,t_mt, haem, who,event) %>%
+  tbl_summary()
+
+
+```
+
+
+```{r}
+#3) convert days to months (assume there are 30 days in one month).
+
+
+df <- df %>%
+  mutate(t_mt_month = t_mt/30)
+
+```
+
+```{r}
+# 4) Check whether “haemoglobin” and “time from diagnosis of metastasis to randomization” follow normal distribution or not. 
+
+qqnorm(df$haem, main="QQ plot: haemoglobin")
+qqline(df$haem, col="red")
+
+qqnorm(df$t_mt, main="QQ plot: t_mt")
+qqline(df$t_mt, col="red")
+
+shapiro.test(df$haem)
+shapiro.test(df$t_mt)
+
+# for haem, p = 0.1584, we cannot reject H0, normally distributed
+# for t_mt, p < 2.2e-16, we reject H0, are not normally distributed
+
+
+```
+```{r}
+# Since this variable time from diagnosis of metastasis to randomization is not normally distributed, we need to do transformation. 
+
+# First check if there are zeros
+summary(df$t_mt)
+sum(data$t_mt == 0, na.rm = TRUE)
+
+# We have zeros in the variable. 
+
+df$log_t_mt <- log(df$t_mt + 1)
+
+summary(df$log_t_mt)
+# check if we successfully remove 0 )
+sum(df$t_mt == 0, na.rm = TRUE)
+sum(df$log_t_mt == 0, na.rm = TRUE)
+
+
+qqnorm(df$log_t_mt)
+qqline(df$log_t_mt, col="blue")
+
+shapiro.test(df$log_t_mt)
+
+# now p = 0.007589, transformation is done, variable now is normally distributed. 
+
+```
+```{r}
+
+# 5) Calculate the ROC curve and AUC with 95% confidence interval for haemoglobin and interpret the value of AUC. You should install “pROC” package. 
+# Use e.g. roc() , plot() , ci.auc()
+
+install.packages("pROC")
+library(pROC)
+
+roc_obj <- roc(df$event, df$haem)
+
+plot(roc_obj, col="blue", main="ROC Curve for Haemoglobin")
+abline(a=0, b=1, lty=2, col="gray")
+
+auc(roc_obj)
+ci.auc(roc_obj)
+
+# H0:AUC=0.5
+
+
+```
+```{r}
+# 6)  As plotting ROC curve by using roc() function, you could find the x axis starting from 1. You think it is not good and re-plot ROC curve with x axis equal to 1-specificity and y equal to sensitivity. Use e.g. plot() , abline() 
+
+plot(roc_obj,
+     legacy.axes = TRUE,      # transforma x axix Specificity to 1- Specificity
+     xlab = "1 - Specificity",
+     ylab = "Sensitivity",
+     col = "blue",
+     main = "ROC Curve (Standard Axes)")
+
+abline(a = 0, b = 1, lty = 2, col = "gray")
+
+```
+```{r}
+# 7) List operating characteristics of haemoglobin for death, including sensitivity and specificity, and their 95% confidence intervals for each threshold. Use e.g. ci.se() , ci.sp() .
+
+coords(roc_obj, "all", ret=c("threshold", "sensitivity", "specificity"))
+
+ci.se(roc_obj)
+
+ci.sp(roc_obj)
+
+```
+
+```{r}
+
+# 8) Continued to question 7), find the optimal cut-oﬀ point on a basis of Youden’s J statistic.
+
+opt <- coords(roc_obj,
+              x = "best",
+              best.method = "youden",
+              ret = c("threshold", "sensitivity", "specificity", "youden"),
+              transpose = FALSE)
+
+opt
+
+
+plot(roc_obj, legacy.axes=TRUE, main="ROC with Youden optimal cut-off")
+abline(0, 1, lty=2, col="gray")
+
+points(opt$specificity, opt$sensitivity, pch=19, col="red")
+
+text(1 - opt$specificity, opt$sensitivity,
+     labels = paste0("cut-off=", round(opt$threshold, 2)),
+     pos = 4)
+
+
+```
+
+```{r}
+
+# 9) Continued to question 8), calculate positive predictive value and negative predictive value.
+Se <- opt$sensitivity
+Sp <- opt$specificity
+Prev <- mean(df$event)   # 样本患病率
+
+PPV <- (Se*Prev) / (Se*Prev + (1-Sp)*(1-Prev))
+NPV <- (Sp*(1-Prev)) / ((1-Se)*Prev + Sp*(1-Prev))
+
+PPV
+NPV
+
+
+```
+
+```{r}
+#10) Continued to question 8), calculate positive likelihood ratio and post-test probability.
+
+```
+

@@ -1,0 +1,882 @@
+---
+title: "Demo"
+params:
+  run_prelim: F
+  run_kappa: F
+  run_ICC: F
+  run_CCC: F
+  run_AIC: F
+  run_Brier: F
+  run_logistic: F
+  run_calibration: T
+  run_youden: F
+  run_DCA: FALSE
+  run_overfitting: FALSE
+  run_CV: FALSE
+  run_Exerbias: T
+---
+
+```{r, include = params$run_prelim, eval=params$run_prelim}
+
+library(rmarkdown)
+library(psych)
+library(dplyr)
+library(tibble)
+library(irr)
+library(DescTools)
+library(vcd)
+
+##```{r eval=FALSE} #displays only results
+##```{r echo=FALSE} #displays only code
+
+data <- data.frame(Diagnosis = rnorm(20, mean = 4, sd = 2),
+                   Biomarker1 = rnorm(20, mean = 3, sd = 2),
+                   Biomarker2 = rnorm(20, mean = 7, sd = 2))
+
+cor.test(data$Biomarker1, data$Biomarker2)
+
+```
+
+```{r, include = params$run_kappa, eval=params$run_kappa}
+# Kappa test
+tab <- matrix(c(50, 10,
+                5,  35), nrow = 2, byrow = TRUE)
+# rows = Test A, cols = Test B
+
+psych::cohen.kappa(tab)
+
+# ============================================================
+# KAPPA DEMOS: bias effect + kappa paradox
+# Manual + psych 
+# ============================================================
+
+# Packages (install once if needed):
+# install.packages(c("psych","irr","DescTools","vcd","dplyr","tibble"))
+
+library(dplyr)
+library(tibble)
+library(psych)
+#library(irr)
+#library(DescTools)
+#library(vcd)
+
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
+kappa_from_table <- function(tab) {
+  stopifnot(is.matrix(tab), all(dim(tab) == c(2,2)))
+  N  <- sum(tab)
+  Po <- sum(diag(tab)) / N
+  pA <- rowSums(tab) / N
+  pB <- colSums(tab) / N
+  Pe <- sum(pA * pB)
+  k  <- (Po - Pe) / (1 - Pe)
+  list(Po = Po, Pe = Pe, kappa = k, N = N, pA = pA, pB = pB)
+}
+
+make_raw_from_table <- function(tab) {
+  # Convert a 2x2 table into raw paired ratings (A,B) with N rows
+  # tab rows = A (0,1), cols = B (0,1)
+  stopifnot(is.matrix(tab), all(dim(tab) == c(2,2)))
+  a0b0 <- tab[1,1]; a0b1 <- tab[1,2]; a1b0 <- tab[2,1]; a1b1 <- tab[2,2]
+  A <- c(rep(0, a0b0 + a0b1), rep(1, a1b0 + a1b1))
+  B <- c(rep(0, a0b0), rep(1, a0b1), rep(0, a1b0), rep(1, a1b1))
+  data.frame(A = A, B = B)
+}
+
+print_all_kappas <- function(tab, label = "") {
+  # Ensure dimnames are "0","1" for nicer output
+  dimnames(tab) <- list(A = c("0","1"), B = c("0","1"))
+
+  cat("\n============================================================\n")
+  cat(label, "\n", sep = "")
+  cat("2x2 table (rows=A, cols=B):\n")
+  print(tab)
+
+  # Manual
+  man <- kappa_from_table(tab)
+  cat(sprintf("\nManual: Po=%.3f | Pe=%.3f | kappa=%.3f\n", man$Po, man$Pe, man$kappa))
+  cat(sprintf("Marginals: p(A=1)=%.3f | p(B=1)=%.3f\n",
+              man$pA[2], man$pB[2]))
+
+  # Package computations
+  cat("\npsych::cohen.kappa(tab):\n")
+  print(psych::cohen.kappa(tab))
+
+  raw <- make_raw_from_table(tab)
+
+
+
+  invisible(man)
+}
+
+# ============================================================
+# 1) BIAS EFFECT DEMO
+# One test is systematically more "positive" than the other.
+# ============================================================
+
+set.seed(1)
+N <- 2000
+prev_true <- 0.30
+truth <- rbinom(N, 1, prev_true)
+
+# Test A: decent sens/spec
+sens_A <- 0.80
+spec_A <- 0.90
+A <- ifelse(truth == 1, rbinom(N, 1, sens_A), rbinom(N, 1, 1 - spec_A))
+
+# Test B1: similar to A (low bias)
+sens_B1 <- 0.80
+spec_B1 <- 0.90
+B1 <- ifelse(truth == 1, rbinom(N, 1, sens_B1), rbinom(N, 1, 1 - spec_B1))
+
+# Test B2: "biased" toward positives (lower threshold)
+# Higher sensitivity, lower specificity -> higher positive rate
+sens_B2 <- 0.90
+spec_B2 <- 0.75
+B2 <- ifelse(truth == 1, rbinom(N, 1, sens_B2), rbinom(N, 1, 1 - spec_B2))
+
+tab_AB1 <- table(A, B1)[as.character(0:1), as.character(0:1)]
+tab_AB2 <- table(A, B2)[as.character(0:1), as.character(0:1)]
+
+print_all_kappas(tab_AB1, "BIAS DEMO 1: A vs B1 (similar marginal positivity)")
+print_all_kappas(tab_AB2, "BIAS DEMO 2: A vs B2 (B2 more 'positive' -> biased marginals)")
+
+cat("\nPositivity rates (to show bias in category usage):\n")
+cat(sprintf("A  positive rate: %.3f\n", mean(A)))
+cat(sprintf("B1 positive rate: %.3f\n", mean(B1)))
+cat(sprintf("B2 positive rate: %.3f\n", mean(B2)))
+
+# Note:
+# - B2 uses the "positive" category much more often than A.
+# - This changes marginals -> changes Pe -> kappa often decreases.
+
+# ============================================================
+# 2) KAPPA PARADOX / PREVALENCE EFFECT DEMO
+# Very high Po, but low/modest kappa when one category is extreme.
+# ============================================================
+
+# Extreme prevalence: mostly negatives
+tab_prev <- matrix(c(970, 10,
+                     10,  10),
+                   nrow = 2, byrow = TRUE)
+print_all_kappas(tab_prev, "KAPPA PARADOX: extreme prevalence (mostly negatives)")
+
+# Comparison: more balanced marginals with similar-ish Po
+tab_bal <- matrix(c(425, 75,
+                    75, 425),
+                  nrow = 2, byrow = TRUE)
+print_all_kappas(tab_bal, "COMPARISON: balanced marginals (often higher kappa at similar Po)")
+
+cat("\nNote:\n")
+cat("- In the paradox table, Po is high because almost everyone is 'negative'.\n")
+cat("- But Pe is also high (chance agreement is easy when one category dominates),\n")
+cat("  so Po - Pe shrinks and kappa can look surprisingly low.\n")
+
+```
+
+```{r, include = params$run_ICC, eval=params$run_ICC}
+
+###### ICC: influence of rater bias in agreement ICC
+# Load the necessary package
+
+library(irr)
+
+# ---------------------------------------------------------
+# SCENARIO 1: THE BIASED RATER (High Consistency, Low Agreement)
+# ---------------------------------------------------------
+# Imagine Rater B always measures 5 units higher than Rater A (Systematic Bias)
+subject_id <- 1:10
+rater_a    <- c(10, 12, 14, 16, 18, 20, 22, 24, 26, 28)
+rater_b    <- rater_a + 5  # Perfect correlation, but zero agreement on values
+
+data_bias <- data.frame(rater_a, rater_b)
+
+# Calculate Consistency ICC
+icc_cons_bias <- icc(data_bias, model = "twoway", type = "consistency", unit = "single")
+
+# Calculate Agreement ICC
+icc_agree_bias <- icc(data_bias, model = "twoway", type = "agreement", unit = "single")
+
+cat("--- SCENARIO 1: SYSTEMATIC BIAS ---\n")
+cat("Consistency ICC:", round(icc_cons_bias$value, 4), "\n")
+cat("Agreement ICC:  ", round(icc_agree_bias$value, 4), "\n\n")
+
+
+# ---------------------------------------------------------
+# SCENARIO 2: THE ALIGNED RATER (High Consistency, High Agreement)
+# ---------------------------------------------------------
+# Imagine Rater B is very close to Rater A with only slight random noise
+set.seed(123)
+rater_c <- rater_a + rnorm(10, mean = 0, sd = 0.5)
+
+data_aligned <- data.frame(rater_a, rater_c)
+
+# Calculate Consistency ICC
+icc_cons_aligned <- icc(data_aligned, model = "twoway", type = "consistency", unit = "single")
+
+# Calculate Agreement ICC
+icc_agree_aligned <- icc(data_aligned, model = "twoway", type = "agreement", unit = "single")
+
+cat("--- SCENARIO 2: NO SYSTEMATIC BIAS ---\n")
+cat("Consistency ICC:", round(icc_cons_aligned$value, 4), "\n")
+cat("Agreement ICC:  ", round(icc_agree_aligned$value, 4), "\n")
+
+# ---------------------------------------------------------
+# VISUALIZATION: THE IDENTITY LINE TEST
+# ---------------------------------------------------------
+par(mfrow=c(1,2))
+
+# Plot 1: Biased Scenario
+plot(rater_a, rater_b, main="Biased Raters", xlim=c(10,35), ylim=c(10,35), pch=19, col="red")
+abline(a=0, b=1, lty=2) # The "Identity Line" (Perfect Agreement)
+legend("topleft", legend="Identity Line (y=x)", lty=2)
+
+# Plot 2: Aligned Scenario
+plot(rater_a, rater_c, main="Aligned Raters", xlim=c(10,35), ylim=c(10,35), pch=19, col="blue")
+abline(a=0, b=1, lty=2)
+
+```
+
+```{r, include = params$run_CCC, eval=params$run_CCC}
+library(DescTools) # For CCC
+library(irr)       # For ICC
+
+
+# Simulate 100 patients (n is large enough to minimize the n-1 vs n effect)
+set.seed(123)
+n <- 100
+rater_a <- rnorm(n, mean=10, sd=2)
+rater_b <- rater_a + 0.5 + rnorm(n, sd=0.5) # Bias of 0.5 + some noise
+df <- data.frame(rater_a, rater_b)
+
+# 1. Calculate CCC
+ccc_val <- CCC(rater_a, rater_b)$rho.c$est
+
+# 2. Calculate ICC (2,1) Agreement
+icc_val <- icc(df, model = "twoway", type = "agreement")$value
+
+cat("Large Sample Results:\n")
+cat("Lin's CCC: ", round(ccc_val, 5), "\n")
+cat("ICC (2,1): ", round(icc_val, 5), "\n")
+
+
+
+```
+
+```{r, include = params$run_AIC, eval=params$run_AIC}
+
+## Compare AIC and BIC
+
+# 1. Setup Simulation
+set.seed(789)
+n <- 150
+biomarker <- rnorm(n)
+noise_var <- rnorm(n) # Completely random data
+y <- rbinom(n, 1, plogis(0.5 + 2 * biomarker)) # Only biomarker matters
+
+# 2. Fit Models
+model_simple  <- glm(y ~ biomarker, family = binomial)
+model_complex <- glm(y ~ biomarker + noise_var, family = binomial)
+
+# 3. Compare AIC and BIC
+results <- data.frame(
+  Model = c("Simple", "Complex"),
+  AIC = c(AIC(model_simple), AIC(model_complex)),
+  BIC = c(BIC(model_simple), BIC(model_complex))
+)
+
+print(results)
+
+# Note: The 'delta' (difference) is what matters. 
+# A difference > 2 is meaningful; > 10 is strong evidence.
+```
+
+
+```{r, include = params$run_Brier, eval=params$run_Brier}
+library(ResourceSelection) # For HL test
+# 1. Simulate MRI data
+set.seed(123)
+n <- 200
+# True biomarker effect
+biomarker <- rnorm(n)
+prob <- 1 / (1 + exp(-( -1 + 1.5 * biomarker))) # Logistic link
+outcome <- rbinom(n, 1, prob)
+# 2. Fit the model
+model <- glm(outcome ~ biomarker, family = binomial)
+predicted_probs <- predict(model, type = "response")
+# 3. Compute Brier Score (Manual computation)
+brier_score <- mean((predicted_probs - outcome)^2)
+cat("Brier Score:", round(brier_score, 4), "\n")
+# 4. Compute Hosmer-Lemeshow Test
+hl_result <- hoslem.test(outcome, predicted_probs, g = 10)
+print(hl_result)
+# Interpretation Tip: 
+# If p > 0.05, the model is "calibrated" (the buckets match reality).
+
+```
+
+```{r, include = params$run_logistic, eval=params$run_logistic}
+# Reproducibility
+
+set.seed(42)
+
+# ------------------------------------------------------------
+# 1) Simulate example dataset
+# ------------------------------------------------------------
+n <- 500
+
+df <- data.frame(
+  Age       = rnorm(n, mean = 70, sd = 8),
+  Sex       = rbinom(n, 1, 0.45),  # 0=female, 1=male
+  Biomarker = rnorm(n, mean = 0, sd = 1)
+)
+
+# True data-generating model (for simulation)
+# logit(p) = b0 + b_age*Age + b_sex*Sex + b_bio*Biomarker
+b0 <- -6
+b_age <- 0.05
+b_sex <- 0.8
+b_bio <- 1.2
+
+linpred_true <- b0 + b_age*df$Age + b_sex*df$Sex + b_bio*df$Biomarker
+p_true <- 1 / (1 + exp(-linpred_true))
+
+df$Diagnosis <- rbinom(n, 1, p_true)
+
+# ------------------------------------------------------------
+# 2) Fit logistic regression (glm)
+# ------------------------------------------------------------
+fit <- glm(Diagnosis ~ Biomarker + Age + Sex,
+           data = df,
+           family = binomial(link = "logit"))
+
+# Coef table includes Wald z-statistics (Estimate / SE)
+sumfit <- summary(fit)
+sumfit
+
+# Wald z-values explicitly (same as in summary)
+wald_z <- coef(sumfit)[, "z value"]
+wald_p <- coef(sumfit)[, "Pr(>|z|)"]
+cbind(z = wald_z, p = wald_p)
+
+# Odds ratios
+OR <- exp(coef(fit))
+OR
+
+# 95% CI for OR:
+# - Wald CI (quick):
+OR_CI_wald <- exp(confint.default(fit))
+OR_CI_wald
+
+# - Profile likelihood CI:
+OR_CI_prof <- exp(confint(fit))
+OR_CI_prof
+
+# ------------------------------------------------------------
+# 3) Predicted probabilities (risks)
+# ------------------------------------------------------------
+df$pred_risk <- predict(fit, type = "response")
+
+summary(df$pred_risk)
+```
+
+```{r, include = params$run_calibration, eval=params$run_calibration}
+# ------------------------------------------------------------
+# 4) Calibration intercept and slope (logistic recalibration)
+# ------------------------------------------------------------
+# Recalibration model: logit(Y) ~ 1 + logit(predicted risk)
+# Perfect calibration in-sample would be:
+#   intercept = 0, slope = 1  (approximately)
+# Note: use pmin/pmax to avoid infinite logits at 0 or 1.
+
+eps <- 1e-6
+p_clipped <- pmin(pmax(df$pred_risk, eps), 1 - eps)
+lp_hat <- qlogis(p_clipped)  # logit(predicted risk)
+
+cal_fit <- glm(df$Diagnosis ~ lp_hat, family = binomial(link = "logit"))
+summary(cal_fit)
+
+cal_intercept <- coef(cal_fit)[1]
+cal_slope     <- coef(cal_fit)[2]
+
+cat("\nCalibration (logistic recalibration):\n")
+cat(sprintf("  Intercept (ideal 0): %.3f\n", cal_intercept))
+cat(sprintf("  Slope     (ideal 1): %.3f\n", cal_slope))
+
+# Interpretation cues:
+# - Intercept < 0: model tends to OVERpredict risk (predicted too high)
+# - Intercept > 0: model tends to UNDERpredict risk (predicted too low)
+# - Slope < 1: predictions too extreme (overfitting / needs shrinkage)
+# - Slope > 1: predictions not extreme enough (underfitting)
+
+# ------------------------------------------------------------
+# 5) Calibration plot (grouped / binned)
+# ------------------------------------------------------------
+# Simple reliability diagram:
+# - Bin subjects by predicted risk (e.g., deciles)
+# - Plot mean predicted vs observed event rate per bin
+
+K <- 10  # number of bins (deciles)
+bins <- cut(df$pred_risk,
+            breaks = quantile(df$pred_risk, probs = seq(0, 1, length.out = K + 1)),
+            include.lowest = TRUE)
+
+cal_tab <- aggregate(
+  cbind(pred = df$pred_risk, obs = df$Diagnosis) ~ bins,
+  FUN = mean
+)
+
+# Base R plot
+plot(cal_tab$pred, cal_tab$obs,
+     xlim = c(0, 1), ylim = c(0, 1),
+     xlab = "Mean predicted risk (per bin)",
+     ylab = "Observed event rate (per bin)",
+     main = "Calibration plot (decile bins)")
+
+abline(0, 1, lty = 2)  # perfect calibration line
+
+# Optional: connect points for readability
+lines(cal_tab$pred, cal_tab$obs)
+
+# Add a small legend-like annotation with intercept/slope
+legend("topleft",
+       legend = c(sprintf("Cal intercept: %.2f (ideal 0)", cal_intercept),
+                  sprintf("Cal slope: %.2f (ideal 1)", cal_slope)),
+       bty = "n")
+
+
+# ------------------------------------------------------------
+# 6) Optional: smooth calibration curve (loess)
+# ------------------------------------------------------------
+lo <- loess(Diagnosis ~ pred_risk, data = df, span = 0.75)
+
+pred_grid <- seq(0, 1, length.out = 200)
+y_smooth  <- predict(lo, newdata = data.frame(pred_risk = pred_grid))
+
+ok <- is.finite(y_smooth)
+
+plot(pred_grid[ok], y_smooth[ok],
+     type = "l",
+     xlim = c(0, 1), ylim = c(0, 1),
+     xlab = "Predicted risk",
+     ylab = "Smoothed observed probability",
+     main = "Calibration curve (LOESS smooth)")
+
+abline(0, 1, lty = 2)
+
+```
+
+```{r, include = params$run_youden, eval=params$run_youden}
+
+library(pROC)
+# ------------------------------------------------------------
+# ROC demo with Youden-optimal threshold (Option B: default axes)
+# Default pROC plot uses x-axis = Specificity (often decreasing 1 -> 0)
+# ------------------------------------------------------------
+
+set.seed(42)
+n <- 300
+
+# 1) Create example dataset
+df <- data.frame(
+  Biomarker = rnorm(n, mean = 0, sd = 1)
+)
+
+# True data-generating model: logit(p) = -1 + 1.5 * Biomarker
+linpred <- -1 + 1.5 * df$Biomarker
+p_true  <- 1 / (1 + exp(-linpred))
+df$Disease <- rbinom(n, 1, p_true)
+
+# Quick check
+table(df$Disease)
+
+# 2) ROC analysis
+library(pROC)
+
+roc_obj <- roc(response = df$Disease, predictor = df$Biomarker, quiet = TRUE)
+
+# Plot ROC curve (Option B: default axes)
+plot(roc_obj, main = "ROC Curve for Biomarker (default axes)")
+
+# 3) Youden-optimal threshold
+youden <- coords(
+  roc_obj,
+  x = "best",
+  best.method = "youden",
+  ret = c("threshold", "sensitivity", "specificity"),
+  transpose = FALSE
+)
+
+# Extract as numeric scalars (safer for plotting/printing)
+thr  <- as.numeric(youden["threshold"])
+sens <- as.numeric(youden["sensitivity"])
+spec <- as.numeric(youden["specificity"])
+
+cat(sprintf("\nYouden-optimal threshold:\n  threshold = %.3f\n  sensitivity = %.3f\n  specificity = %.3f\n",
+            thr, sens, spec))
+
+# 4) Add point and guide lines at the optimal ROC operating point
+# IMPORTANT: default pROC plot uses x = specificity (NOT 1 - specificity)
+x_best <- spec
+y_best <- sens
+
+points(x_best, y_best, pch = 19, col = "red", cex = 1.2)
+abline(v = x_best, h = y_best, lty = 2, col = "red")
+
+# Annotate with threshold value
+text(
+  x_best, y_best,
+  labels = paste0("Threshold = ", round(thr, 2)),
+  pos = 2,  # to the left (since specificity axis often decreases)
+  col = "red"
+)
+
+```
+
+```{r, include = params$run_DCA, eval=params$run_DCA}
+# ------------------------------------------------------------
+# ROC + Youden threshold (Option B: default axes) + DCA
+# ------------------------------------------------------------
+
+set.seed(42)
+n <- 300
+
+# 1) Create example dataset
+df <- data.frame(
+  Biomarker = rnorm(n, mean = 0, sd = 1)
+)
+
+# True data-generating model: logit(p) = -1 + 1.5 * Biomarker
+linpred <- -1 + 1.5 * df$Biomarker
+p_true  <- 1 / (1 + exp(-linpred))
+df$Disease <- rbinom(n, 1, p_true)
+
+cat("\nDisease prevalence:\n")
+print(prop.table(table(df$Disease)))
+
+# ------------------------------------------------------------
+# 2) ROC analysis and Youden threshold
+# ------------------------------------------------------------
+library(pROC)
+
+roc_obj <- roc(response = df$Disease, predictor = df$Biomarker, quiet = TRUE)
+
+# Plot ROC curve (Option B: default axes = specificity)
+plot(roc_obj, main = "ROC Curve for Biomarker (default axes)")
+
+youden <- coords(
+  roc_obj,
+  x = "best",
+  best.method = "youden",
+  ret = c("threshold", "sensitivity", "specificity"),
+  transpose = FALSE
+)
+
+thr  <- as.numeric(youden["threshold"])
+sens <- as.numeric(youden["sensitivity"])
+spec <- as.numeric(youden["specificity"])
+
+cat(sprintf("\nYouden-optimal threshold:\n  threshold = %.3f\n  sensitivity = %.3f\n  specificity = %.3f\n",
+            thr, sens, spec))
+
+# Add point and guide lines (default axes -> x = specificity)
+x_best <- spec
+y_best <- sens
+
+points(x_best, y_best, pch = 19, col = "red", cex = 1.2)
+abline(v = x_best, h = y_best, lty = 2, col = "red")
+text(x_best, y_best,
+     labels = paste0("Threshold = ", round(thr, 2)),
+     pos = 2, col = "red")
+
+# ------------------------------------------------------------
+# 3) Decision Curve Analysis (DCA)
+# ------------------------------------------------------------
+# DCA needs predicted probabilities. We'll fit a *simple* risk model here
+# (modeling details and logistic regression interpretation can be Day 2).
+fit_risk <- glm(Disease ~ Biomarker, data = df, family = binomial())
+df$pred_risk <- predict(fit_risk, type = "response")
+
+# ---- Using rmda package 
+# install.packages("rmda")
+library(rmda)
+
+dca_obj <- decision_curve(
+  Disease ~ Biomarker,
+  data = df,
+  family = binomial(link = "logit"),
+  thresholds = seq(0.05, 0.60, by = 0.01),
+  confidence.intervals = 0.95,
+  study.design = "cohort"
+)
+
+plot_decision_curve(
+  dca_obj,
+  curve.names = "Model: Biomarker",
+  standardize = FALSE,
+  xlab = "Threshold probability (pt)",
+  ylab = "Net benefit",
+  legend.position = "bottomright"
+)
+
+# ---- Demonstration of how changing pt changes the FP penalty
+# pt encodes the relative weight: w = pt/(1-pt)
+pt_values <- c(0.10, 0.20, 0.40)
+w <- pt_values / (1 - pt_values)
+names(w) <- paste0("pt=", pt_values)
+cat("\nThreshold probability -> implied FP weight w = pt/(1-pt):\n")
+print(w)
+
+# ---- Manual net benefit for:
+# (a) Treat-all
+# (b) Treat-none
+# (c) Model-based: treat if predicted risk >= pt
+net_benefit <- function(y, treat, pt) {
+  # y: true outcome (0/1)
+  # treat: decision (0/1), 1=treat/test positive action
+  n <- length(y)
+  TP <- sum(treat == 1 & y == 1)
+  FP <- sum(treat == 1 & y == 0)
+  (TP / n) - (FP / n) * (pt / (1 - pt))
+}
+
+NB_table <- data.frame(
+  pt = pt_values,
+  NB_treat_none = NA_real_,
+  NB_treat_all  = NA_real_,
+  NB_model      = NA_real_
+)
+
+y <- df$Disease
+for (k in seq_along(pt_values)) {
+  pt <- pt_values[k]
+  treat_none <- rep(0, nrow(df))
+  treat_all  <- rep(1, nrow(df))
+  treat_model <- as.integer(df$pred_risk >= pt)
+
+  NB_table$NB_treat_none[k] <- net_benefit(y, treat_none, pt)
+  NB_table$NB_treat_all[k]  <- net_benefit(y, treat_all,  pt)
+  NB_table$NB_model[k]      <- net_benefit(y, treat_model, pt)
+}
+
+cat("\nNet benefit at selected threshold probabilities:\n")
+print(NB_table, row.names = FALSE)
+
+# Note:
+# - When pt is LOW: you tolerate many false positives -> treat-all may look good.
+# - When pt is HIGH: false positives are costly -> models that avoid FP gain advantage.
+```
+
+```{r, include = params$run_overfitting, eval=params$run_overfitting}
+set.seed(1)
+n <- 200
+p <- 20
+
+X <- matrix(rnorm(n*p), n, p)
+beta <- c(1, rep(0, p-1))
+linpred <- X %*% beta
+prob <- 1 / (1 + exp(-linpred))
+y <- rbinom(n, 1, prob)
+
+df <- data.frame(y = y, X)
+
+# Overfit model: use all predictors
+fit <- glm(y ~ ., data = df, family = binomial())
+
+# Apparent AUC
+library(pROC)
+p_hat <- predict(fit, type = "response")
+auc_app <- auc(y, p_hat)
+
+# Train/test split
+idx <- sample(1:n, size = round(0.7*n))
+fit_tr <- glm(y ~ ., data = df[idx, ], family = binomial())
+p_test <- predict(fit_tr, newdata = df[-idx, ], type = "response")
+auc_test <- auc(df$y[-idx], p_test)
+
+auc_app
+auc_test
+```
+
+```{r, include = params$run_CV, eval=params$run_CV}
+# ============================================================
+# Eye-catching 5-fold CV demo: apparent vs validated AUC
+# (Designed to show optimism from overfitting)
+# ============================================================
+
+set.seed(123)
+
+# ------------------------------------------------------------
+# 1) Simulate data where ONLY X1 has signal, others are noise
+#    Use many predictors to encourage overfitting
+# ------------------------------------------------------------
+n <- 220
+p <- 40
+
+X <- matrix(rnorm(n * p), nrow = n, ncol = p)
+colnames(X) <- paste0("X", 1:p)
+
+# True model uses only X1
+linpred_true <- -0.2 + 1.1 * X[, 1]
+p_true <- 1 / (1 + exp(-linpred_true))
+y <- rbinom(n, 1, p_true)
+
+df <- data.frame(y = y, X)
+
+cat("Prevalence:", mean(df$y), "\n")
+
+# ------------------------------------------------------------
+# 2) Fit an OVERFITTED logistic model using all predictors
+# ------------------------------------------------------------
+fit_full <- glm(y ~ ., data = df, family = binomial())
+
+# Apparent predictions (in-sample)
+p_app <- predict(fit_full, type = "response")
+
+# ------------------------------------------------------------
+# 3) 5-fold cross-validation: out-of-fold predictions
+# ------------------------------------------------------------
+K <- 5
+fold_id <- sample(rep(1:K, length.out = n))
+
+p_oof <- rep(NA_real_, n)   # out-of-fold predicted risks
+
+for (k in 1:K) {
+  tr <- fold_id != k
+  te <- fold_id == k
+
+  fit_k <- glm(y ~ ., data = df[tr, ], family = binomial())
+  p_oof[te] <- predict(fit_k, newdata = df[te, ], type = "response")
+}
+
+# ------------------------------------------------------------
+# 4) Compute AUCs (apparent vs CV-validated)
+# ------------------------------------------------------------
+library(pROC)
+
+roc_app <- roc(df$y, p_app, quiet = TRUE)
+roc_cv  <- roc(df$y, p_oof, quiet = TRUE)
+
+auc_app <- as.numeric(auc(roc_app))
+auc_cv  <- as.numeric(auc(roc_cv))
+
+cat(sprintf("AUC apparent (training): %.3f\n", auc_app))
+cat(sprintf("AUC 5-fold CV (OOF):     %.3f\n", auc_cv))
+
+# Fold-wise AUCs (for variability visualization)
+auc_fold <- numeric(K)
+for (k in 1:K) {
+  te <- fold_id == k
+  auc_fold[k] <- as.numeric(auc(roc(df$y[te], p_oof[te], quiet = TRUE)))
+}
+cat("Fold AUCs:\n")
+print(round(auc_fold, 3))
+
+# ------------------------------------------------------------
+# 5) FIGURE 1 (eye-catching): ROC curves (apparent vs CV)
+# ------------------------------------------------------------
+plot(roc_app, main = "ROC: Apparent vs 5-fold CV (out-of-fold)",
+     lwd = 3)
+plot(roc_cv, add = TRUE, lwd = 3, col = "blue")
+abline(0, 1, lty = 2)
+
+legend("bottomright",
+       legend = c(sprintf("Apparent AUC = %.3f", auc_app),
+                  sprintf("5-fold CV AUC = %.3f", auc_cv)),
+       lwd = 3, col = c("black", "blue"),
+       bty = "n")
+
+```
+
+```{r, include = params$run_Exerbias, eval=params$run_Exerbias}
+# ============================================
+# MRI Reliability + Prediction Demo (EXERCISE)
+# ============================================
+
+set.seed(42)
+n <- 200
+
+# 1) Simulate a continuous MRI biomarker
+biomarker <- rnorm(n)
+
+# 2) "True" latent lesion burden (unobserved)
+lesion_true <- 0.8*biomarker + rnorm(n, sd = 1)
+
+# 3) Two raters score lesion burden with noise + small bias
+rater1 <- lesion_true + rnorm(n, sd = 1.0) + 0.0
+rater2 <- lesion_true + rnorm(n, sd = 1.0) + 0.4   # slight positive bias
+
+# 4) Clinical outcome (e.g., MCI/AD vs control) depends on biomarker + true lesion
+linpred <- -1 + 1.2*biomarker + 0.6*lesion_true
+prob <- 1/(1+exp(-linpred))
+outcome <- rbinom(n, 1, prob)
+
+dat <- data.frame(outcome, biomarker, rater1, rater2)
+dat$lesion_mean <- rowMeans(dat[, c("rater1","rater2")])
+
+
+```
+
+```{r}
+# -----------------------
+# TASK A: ICC (TODO)
+# -----------------------
+# Install/load a package (choose one):
+# - psych: psych::ICC()
+# - irr: irr::icc()
+# Compute ICC(2,1), absolute agreement, single rater
+
+install.packages("irr")
+library(irr)
+
+icc_res <- icc(
+  dat[, c("rater1", "rater2")],
+  model = "twoway",
+  type  = "agreement",
+  unit  = "single"
+)
+
+print(icc_res)
+
+
+```
+
+
+```{r}
+# -----------------------
+# TASK B: AIC (TODO)
+# -----------------------
+m1 <- glm(outcome ~ biomarker, data = dat, family = binomial)
+m2 <- glm(outcome ~ biomarker + lesion_mean, data = dat, family = binomial)
+
+# TODO: Compare AIC(m1) vs AIC(m2)
+
+AIC(m1,m2)
+
+```
+
+```{r}
+# -----------------------
+# TASK C: Brier score (TODO)
+# -----------------------
+p1 <- predict(m1, type = "response")
+p2 <- predict(m2, type = "response")
+
+# TODO: brier1 <- mean((p1 - dat$outcome)^2)
+# TODO: brier2 <- mean((p2 - dat$outcome)^2)
+# 预测概率
+p1 <- predict(m1, type = "response")
+p2 <- predict(m2, type = "response")
+
+# 计算 Brier score
+brier1 <- mean((p1 - dat$outcome)^2)
+brier2 <- mean((p2 - dat$outcome)^2)
+
+# 整理输出
+cat("Brier score (Model 1):", round(brier1, 4), "\n")
+cat("Brier score (Model 2):", round(brier2, 4), "\n")
+
+
+```
+

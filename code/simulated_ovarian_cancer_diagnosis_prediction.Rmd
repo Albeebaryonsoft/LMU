@@ -1,0 +1,216 @@
+---
+title: "simulated_ovarian_cancer_diagnosis_prediction"
+output: html_document
+---
+
+```{r}
+# ============================================================
+# Simulated ovarian cancer dataset (for re-doing BOTH files later)
+# Only DATA SIMULATION for now
+# ============================================================
+
+set.seed(20260224)
+
+n <- 1200  # sample size
+
+# -----------------------
+# 1) Patient baseline covariates
+# -----------------------
+age <- round(rnorm(n, mean = 58, sd = 12))
+age <- pmin(pmax(age, 18), 90)
+
+postmenopausal <- rbinom(n, 1, plogis((age - 50) / 4))  # increases with age
+family_history <- rbinom(n, 1, 0.18)
+
+brca <- rbinom(n, 1, ifelse(family_history == 1, 0.22, 0.08))  # enriched among FH+
+bmi  <- round(rnorm(n, mean = 26, sd = 4), 1)
+bmi  <- pmin(pmax(bmi, 16), 45)
+
+# Symptoms / clinical context
+symptom_score <- pmin(pmax(round(rnorm(n, mean = 1.1 + 0.35*postmenopausal, sd = 0.9), 0), 0), 3) # 0..3
+
+# Ultrasound morphology score (e.g., IOTA-like ordinal)
+us_score <- sample(0:3, n, replace = TRUE, prob = c(0.40, 0.28, 0.20, 0.12)) # 0..3
+
+# Imaging / clinical findings
+ascites <- rbinom(n, 1, plogis(-2.2 + 0.6*us_score + 0.3*symptom_score))
+
+# -----------------------
+# 2) Latent "malignancy risk" to induce realistic correlation structure
+# -----------------------
+# This latent factor will drive biomarkers + tumor size + true cancer status
+latent_risk <- 0.03*(age - 58) +
+               0.9*brca +
+               0.55*us_score +
+               0.35*symptom_score +
+               0.65*ascites +
+               rnorm(n, 0, 1)
+
+# -----------------------
+# 3) Biomarkers (right-skewed; use log-scale internally)
+# -----------------------
+# CA-125 (U/mL) and HE4 (pmol/L), plus CEA for realism (less specific)
+log_ca125 <- 4.1 + 0.60*latent_risk + rnorm(n, 0, 0.60)
+log_he4   <- 3.55 + 0.50*latent_risk + rnorm(n, 0, 0.50)
+log_cea   <- 1.5 + 0.15*latent_risk + rnorm(n, 0, 0.45)
+
+ca125 <- exp(log_ca125)
+he4   <- exp(log_he4)
+cea   <- exp(log_cea)
+
+# Optional: ROMA-like score (not exactly ROMA formula, just a correlated marker)
+roma_proxy <- plogis(-3.0 + 0.015*age + 0.8*postmenopausal + 0.9*log(ca125) + 0.8*log(he4))
+
+# -----------------------
+# 4) True ovarian cancer status (binary outcome)
+# -----------------------
+# Generate event probability from a "truth" model (not equal to any later fitted model)
+linpred_true <- -7.2 +
+                0.035*age +
+                1.10*brca +
+                0.70*us_score +
+                0.40*symptom_score +
+                0.85*ascites +
+                1.05*log(ca125) +
+                0.85*log(he4)
+
+p_true <- plogis(linpred_true)
+ovarian_cancer <- rbinom(n, 1, p_true)
+
+# -----------------------
+# 5) Continuous measurement for agreement tasks (File 1)
+#    e.g., tumor maximal diameter (mm) and a "risk score" (0-100)
+# -----------------------
+tumor_diam_true <- pmax(0, rnorm(n, mean = 18 + 28*ovarian_cancer + 6*us_score + 5*ascites, sd = 12))
+
+risk_score_true <- pmin(pmax(round(100*plogis(-2.5 + 0.9*latent_risk + 0.25*ovarian_cancer) + rnorm(n, 0, 3)), 0), 100)
+
+# -----------------------
+# 6) Two raters / readers (for Kappa + ICC + CCC)
+# -----------------------
+# Binary classification by two clinicians: "malignant?" (for Cohen's kappa)
+# Use noisy versions of a latent diagnostic signal and different thresholds
+diag_signal_A <- scale(linpred_true + rnorm(n, 0, 1.0))[,1]
+diag_signal_B <- scale(linpred_true + rnorm(n, 0, 1.0))[,1]
+
+raterA_malignant <- ifelse(diag_signal_A > 0.00, 1, 0)
+raterB_malignant <- ifelse(diag_signal_B > 0.15, 1, 0)  # slightly more conservative
+
+# Continuous measurement by two radiologists: tumor diameter with noise + slight bias
+raterA_diam <- tumor_diam_true + rnorm(n, 0, 4.0)
+raterB_diam <- tumor_diam_true + 2.5 + rnorm(n, 0, 4.5)  # systematic +2.5mm bias
+
+# Another continuous score (for CCC demonstration)
+raterA_risk <- pmin(pmax(risk_score_true + rnorm(n, 0, 6), 0), 100)
+raterB_risk <- pmin(pmax(risk_score_true + 5 + rnorm(n, 0, 7), 0), 100) # systematic +5 bias
+
+# -----------------------
+# 7) Assemble final dataset
+# -----------------------
+ovca_dat <- data.frame(
+  ovarian_cancer = ovarian_cancer,
+  age = age,
+  postmenopausal = postmenopausal,
+  bmi = bmi,
+  family_history = family_history,
+  brca = brca,
+  symptom_score = symptom_score,
+  us_score = us_score,
+  ascites = ascites,
+  ca125 = ca125,
+  he4 = he4,
+  cea = cea,
+  roma_proxy = roma_proxy,
+  tumor_diam_true = tumor_diam_true,
+  risk_score_true = risk_score_true,
+  raterA_malignant = raterA_malignant,
+  raterB_malignant = raterB_malignant,
+  raterA_diam = raterA_diam,
+  raterB_diam = raterB_diam,
+  raterA_risk = raterA_risk,
+  raterB_risk = raterB_risk
+)
+
+# Quick sanity checks (optional prints)
+cat("n =", n, "\n")
+cat("Simulated ovarian cancer prevalence =", round(mean(ovca_dat$ovarian_cancer), 3), "\n")
+summary(ovca_dat[, c("age","ca125","he4","us_score","ascites","ovarian_cancer")])
+
+
+names(ovca_dat)
+```
+# What is the level of agreement between two clinicians in classifying ovarian tumors as malignant vs benign?
+
+```{r}
+
+table_AB <- table(
+  ovca_dat$raterA_malignant,
+  ovca_dat$raterB_malignant
+)
+
+table_AB
+```
+```{r}
+observed_agreement <- sum(diag(table_AB)) / sum(table_AB)
+observed_agreement
+
+#The two raters agreed in 85% of cases.
+```
+```{r}
+install.packages("psych")   # only once
+library(psych)
+
+kappa_result <- cohen.kappa(table_AB)
+kappa_result
+
+# There is substantial agreement between the two raters in classifying ovarian tumors as malignant vs benign (κ = 0.66, 95% CI 0.61–0.70).
+
+
+```
+# How reliable are tumor diameter measurements between the two radiologists?
+
+
+```{r}
+library(psych)
+
+diam_data <- ovca_dat[, c("raterA_diam", "raterB_diam")]
+
+icc_result <- ICC(diam_data)
+icc_result
+
+
+# The tumor diameter measurements demonstrate excellent absolute agreement between the two raters (ICC = 0.923).
+
+```
+```{r}
+
+model2 <- glm(
+  ovarian_cancer ~ age +
+    log(ca125) +
+    log(he4) +
+    brca +
+    us_score +
+    ascites,
+  data = ovca_dat,
+  family = binomial()
+)
+
+p <- predict(model2, type = "response")
+
+library(pROC)
+roc_obj <- roc(ovca_dat$ovarian_cancer, p)
+
+auc(roc_obj)
+ci.auc(roc_obj)
+
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+

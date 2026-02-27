@@ -1,0 +1,356 @@
+---
+title: "meta_analysis"
+output: html_document
+---
+
+# basics
+```{r}
+install.packages(c("dplyr", "meta", "kable"))
+
+library(meta)
+library(dplyr)
+library(knitr)
+
+```
+
+
+```{r}
+data  <- 
+  data.frame(Study = c("Golcher", "Casadei", "Jang", "Versteijne", "Ghaneh CRT"),
+             n = c(66, 50, 362, 246, 88),
+             HR = c(0.99, 0.96, 0.51, 0.78, 0.41),
+             ci_lb = c(0.60, 0.10, 0.28, 0.58, 0.15),
+             ci_ub = c(1.64, 9.25, 0.93, 1.05, 1.10))
+
+data |> kable()
+```
+
+```{r}
+data <-
+  data |>
+  mutate(log_HR = log(HR),
+         log_ci_lb = log(ci_lb),
+         log_ci_ub = log(ci_ub),
+         log_se = (log_ci_ub - log_ci_lb)/2/qnorm(.975)
+  )
+
+metagen_results_log <- metagen(log_HR, log_se, data = data)
+
+forest(metagen_results_log)
+
+
+ss<-data$log_se
+
+ww<-1/(ss*ss)
+ww
+ww/sum(ww)
+exp(-0.29) 
+
+# What to do with heterogeneity? Do regression to see what factors matter
+
+```
+
+```{r}
+metagen_results_backtrans <- metagen(log_HR, 
+                                     log_se, 
+                                     data = data, 
+                                     backtransf = T, 
+                                     func.backtransf = exp)
+
+forest(metagen_results_backtrans)
+
+# metagen can apply different methods, but we never know the default setting. So be careful. 
+```
+```{r}
+metagen(log_HR, 
+        log_se, 
+        data = data, 
+        backtransf = T, 
+        func.backtransf = exp, 
+        method.tau = "DL")
+```
+```{r}
+metagen_results <- metagen(log_HR, 
+                           log_se, 
+                           data = data, 
+                           backtransf = T, 
+                           func.backtransf = exp, 
+                           hakn = TRUE)
+metagen_results
+
+
+# The heterogeneity is not significant. 
+# IQWIG: Hartung-knapp is recommended. The outcome they want to see is mostly OR and HR.
+# Question 2 is a exam question. 
+
+
+
+```
+
+
+```{r}
+estimates(metagen_results, prediction = TRUE)
+
+```
+```{r}
+funnel(metagen_results)
+
+# The large the number of the studys, the closer the results will get close to the centre. 
+```
+
+# two-stage IPDMA
+
+```{r}
+install.packages("metafor")
+install.packages("lme4")
+install.packages("logistf")
+
+library("metafor")
+library("lme4")
+library("logistf")
+```
+
+```{r}
+load("/Users/yanhangqiu/Epi R project/LMU/data/AOM.RData")
+
+summary(ds.final)
+str(ds.final)
+```
+```{r}
+summary(ds.final[ds.final$STUDY==1 & ds.final$TREAT==0,])
+
+summary(ds.final[ds.final$STUDY==1 & ds.final$TREAT==1,])
+```
+```{r}
+ttt <-table(ds.final$TREAT,ds.final$POUTCOME, ds.final$STUDY)
+ttt[,,1]
+odds.rfc <- function(tt)
+{
+  OR <-tt[1,1]*tt[2,2]/tt[1,2]*tt[2,1]
+  return(OR)
+}
+
+# integrate OR of all 6 studies
+
+# calculate RR 
+ttt[1,2,1] / sum(ttt[1,,1])
+ttt[2,2,1] / sum(ttt[2,,1])
+ttt[1,2,1] / sum(ttt[1,,1])
+```
+
+
+```{r}
+
+# calculate for each of the studies
+odds.rfc(ttt[,,1])
+OR.all <- NULL
+for (i in 1:6) 
+  OR.all <- c(OR.all, round(odds.rfc(ttt[,,i],4)))
+
+OR.all
+
+
+```
+
+
+
+```{r}
+
+# link function log
+fit.unadj1 <- glm(POUTCOME ~ TREAT, data = ds.final, 
+                  family = binomial(link="log"), subset = STUDY==1)
+fit.unadj1
+
+summary(fit.unadj1)
+
+exp(coefficients(fit.unadj1)["TREAT"])
+exp(confint(fit.unadj1, "TREAT"))
+
+# link function logit
+exp(coefficients(fit.unadj1)["TREAT"])
+
+fit.unadj2 <- glm(POUTCOME ~ TREAT, data = ds.final, 
+                  family = binomial(link="logit"), subset = STUDY==1)
+fit.unadj2
+
+exp(coefficients(fit.unadj2)["TREAT"])
+
+
+```
+```{r}
+fit.adj1 <- glm(POUTCOME ~ TREAT + AGE + GENDER + BILAT_0, 
+                data = ds.final, 
+                family = binomial(link = "log"), 
+                subset = STUDY==1)
+exp(c(coefficients(fit.adj1)["TREAT"], confint(fit.adj1, "TREAT")))
+
+# both in adjusted and unadjusted, the effect is not significant.
+# we can decide which to use.
+```
+```{r}
+
+# now look at all 6 studies in an adjusted model
+studies <- sort(unique(ds.final$STUDY))
+ad.results <- data.frame(logRR=NULL, logRR.se=NULL)
+
+for (i in 1:length(studies)) {
+  fit <- glm(POUTCOME ~ TREAT + AGE + GENDER + BILAT_0, 
+             data = ds.final, 
+             family = binomial(link="log"), 
+             subset = STUDY==studies[i])
+  ad.results[i, "logRR"] <- coefficients(fit)["TREAT"]
+  ad.results[i, "logRR.se"] <- sqrt(vcov(fit)["TREAT","TREAT"])
+}
+
+ad.results
+
+```
+```{r}
+# now look at all 6 studies in an unadjusted model
+
+
+studies <- sort(unique(ds.final$STUDY))
+un.ad.results <- data.frame(logRR=NULL, logRR.se=NULL)
+
+for (i in 1:length(studies)) {
+  fit <- glm(POUTCOME ~ TREAT, 
+             data = ds.final, 
+             family = binomial(link="log"), 
+             subset = STUDY==studies[i])
+  un.ad.results[i, "logRR"] <- coefficients(fit)["TREAT"]
+  un.ad.results[i, "logRR.se"] <- sqrt(vcov(fit)["TREAT","TREAT"])
+}
+
+un.ad.results
+
+
+
+```
+
+```{r}
+with(ad.results, forest(x = logRR, sei = logRR.se, 
+                        transf = exp, refline = 1,
+                        xlab = "Relative Risk", 
+                        main = "Use of antibiotics"))
+
+
+with(un.ad.results, forest(x = logRR, sei = logRR.se, 
+                        transf = exp, refline = 1,
+                        xlab = "Relative Risk", 
+                        main = "Use of antibiotics"))
+
+# ?? why no difference 
+```
+
+```{r}
+fe.2stage <- rma(yi = logRR, sei = logRR.se, method = "FE", data = ad.results)
+summary(fe.2stage)
+
+```
+```{r}
+re.2stage <- rma(yi = logRR, sei = logRR.se, method = "REML", data = ad.results)
+summary(re.2stage)
+
+```
+```{r}
+re.2stage.knha <- rma(yi = logRR, sei = logRR.se, method = "REML", test = "knha", 
+                      data = ad.results)
+summary(re.2stage.knha)
+
+level <- 0.05
+crit <- qt(c(level/2, 1-(level/2)), df = (re.2stage.knha$k-2))
+mu <- re.2stage.knha$b[[1]]
+tau2 <- re.2stage.knha$tau2
+sigma2 <- vcov(re.2stage.knha)
+mu + crit * c(sqrt(tau2 + sigma2))
+
+exp(c(-1.0698092,0.1370333))
+
+
+```
+```{r}
+mean.age <- mean.bilat_0 <- array(NA, dim=length(studies))
+for (i in 1:length(studies)) {
+  mean.age[i] <- mean(ds.final[ds.final$STUDY==studies[i], "AGE"])
+  mean.bilat_0[i] <- mean(ds.final[ds.final$STUDY==studies[i], "BILAT_0"])
+}
+ad.results <- cbind(ad.results, mean.age, mean.bilat_0)
+ad.results
+
+```
+
+```{r}
+
+remr.bilat0 <- rma(yi = logRR, sei = logRR.se, mods = mean.bilat_0, 
+                   method = "REML", test = "knha", data = ad.results)
+summary(remr.bilat0)
+
+plot(lm(ad.results))
+```
+
+```{r}
+### calculate predicted RR for the prevalence bilateral AOM of 0 to 1, in steps of .01
+preds <- predict(remr.bilat0, newmods=seq(0, 1, 0.01), transf=exp)
+ 
+### calculate point sizes by rescaling the standard errors
+wi    <- 1/sqrt(ad.results$logRR.se)
+size  <- 0.5 + 3.0 * (wi - min(wi))/(max(wi) - min(wi))
+ 
+### plot the RR against the prevalence of bilateral AOM
+plot(ad.results$mean.bilat_0, exp(ad.results$logRR), pch=19, cex=size,
+     xlab="Prevalence bilateral AOM", ylab="Relative Risk",
+     las=1, bty="l", log="y")
+ 
+### add predicted values (and corresponding CI bounds)
+lines(seq(0, 10, 0.1), preds$pred)
+lines(seq(0, 10, 0.1), preds$ci.lb, lty="dashed")
+lines(seq(0, 10, 0.1), preds$ci.ub, lty="dashed")
+
+```
+
+```{r}
+ad2.results <- data.frame(logRR = NULL, logRR.se = NULL, 
+                          beta.int = NULL, beta.int.se = NULL)
+
+for (i in 1:length(studies)) {
+  fit <- glm(POUTCOME ~ TREAT + AGE + GENDER + BILAT_0 + TREAT:BILAT_0, 
+             data = ds.final, 
+             family = binomial(link="log"), 
+             subset = STUDY==studies[i])
+  ad2.results[i, "logRR"] <- coefficients(fit)["TREAT"]
+  ad2.results[i, "logRR.se"] <- sqrt(vcov(fit)["TREAT","TREAT"])
+  ad2.results[i, "beta.int"] <- coefficients(fit)["TREAT:BILAT_0"]
+  ad2.results[i, "beta.int.se"] <- sqrt(vcov(fit)["TREAT:BILAT_0","TREAT:BILAT_0"])
+}
+
+ad2.results
+```
+```{r}
+library(logistf)
+
+ds.study3 <- subset(ds.final, STUDY==studies[3])
+
+fit <- logistf(POUTCOME ~ TREAT + AGE + GENDER + BILAT_0 + TREAT:BILAT_0, 
+               data = ds.study3)
+index1 <- which(names(coefficients(fit))=="TREAT")
+index2 <- which(names(coefficients(fit))=="TREAT:BILAT_0")
+
+ad2.results[3, "logRR"] <- coefficients(fit)[index1]
+ad2.results[3, "logRR.se"] <- sqrt(vcov(fit)[index1, index1])
+ad2.results[3, "beta.int"] <- coefficients(fit)[index2]
+ad2.results[3, "beta.int.se"] <- sqrt(vcov(fit)[index2, index2])
+
+ad2.results
+
+# this part is a bit weird.
+
+```
+
+```{r}
+repwt.bilat0  <- rma(yi = beta.int, sei = beta.int.se, 
+                     method = "REML", 
+                     test="knha", 
+                     data = ad2.results)
+summary(repwt.bilat0)
+```
+

@@ -1,0 +1,102 @@
+---
+title: "meta_analysis_day2"
+output: html_document
+---
+
+# meta analysis of diagnosis
+```{r}
+install.packages("mada")
+
+```
+
+```{r}
+library(mada)
+
+AuditC6 <- data.frame(TP = c(47, 126, 19, 36, 130, 84),
+FN = c(9, 51, 10, 3, 19, 2),
+FP = c(101, 272, 12, 78, 211, 68),
+TN = c(738, 1543, 192, 276, 959, 89))
+
+AuditC6
+
+# sensitivity 
+SE <- AuditC6$TP/ (AuditC6$TP/AuditC6$FN)
+SP <- AuditC6$TN/ (AuditC6$FP/AuditC6$TN)
+
+SE
+SP
+```
+
+```{r}
+
+# create names as a column
+AuditC6$names <- c("Study 1","Study 2","Study 4","Study 4","Study 5","Study 6")
+
+
+data(AuditC)
+AuditC
+tail(AuditC)
+
+madad(AuditC)
+AuditC[8,]
+
+TP<-752
+FN<-0.5
+SE <- TP/(TP+FN)
+log.odds <- log(SE/(1-SE))
+
+
+# Stand error of log.odds of sensitivity
+se.log.odds <- sqrt(1/TP + 1/FN)
+
+# use log odds to calculate the confidence interval 
+ci.log.odds <- log.odds+c(-1,0,1)*qnorm(0.975)*se.log.odds
+
+# and then the probability
+p.SE <- exp(ci.log.odds)/(1+ci.log.odds)
+
+```
+
+```{r}
+AuditC.d <- madad(AuditC)
+
+# fpr = false positive rate
+AuditC.d$fpr
+AuditC.d$fpr[[1]]
+AuditC.d$fpr$fpr[8]
+AuditC.d$fpr$fpr.ci[8,]
+
+
+par(mfrow = c(1,2))
+forest(AuditC.d, type = "sens")
+forest(AuditC.d, type = "spec")
+
+
+```
+```{r}
+
+par(mfrow = c(1,2))
+
+## visualize diagnosis accuracy and weights of all studies:
+
+## crosshair plot
+rs <- rowSums(AuditC)
+rs <- 4 * rs/max(rs) 
+crosshair(AuditC, xlim = c(0,0.6), ylim = c(0.4,1), col = 1:14, lwd = rs)
+
+#points plot
+ROCellipse(AuditC, pch = "")
+points(fpr(AuditC), sens(AuditC))
+
+AuditC.d
+
+fit.DOR.DSL <- madauni(AuditC)
+fit.DOR.MH <- madauni(AuditC, method = "MH")
+summary(fit.DOR.MH)
+
+```
+
+```{r}
+
+```
+

@@ -1,0 +1,338 @@
+---
+title: "Exercise missing values"
+output: html_document
+---
+
+```{r setup}
+# Packages that need to be installed
+require(dplyr)
+require(tidyr)
+require(naniar)
+require(mice)
+require(lattice)
+require(flextable)
+require(ggmice)
+require(ggplot2)
+require(patchwork)
+require(forestploter)
+```
+
+```{r function forest plot}
+# Function to compare later the output of the linear regression of a complete case analysis and with multiple imputation
+
+# lm_cc and lm_mi are the output object of the lm() function 
+
+compare_fp <- function(lm_cc, lm_mi) {
+sum_mi <- summary(pool(lm_mi), conf.int = TRUE)
+
+df_mi <- data.frame(
+  variable = sum_mi$term,
+  estimate_mi = sum_mi$estimate, 
+  LCI_mi = sum_mi$`2.5 %`,
+  UCI_mi = sum_mi$`97.5 %` )
+
+df_cc <- as.data.frame(lm_cc$coefficients)
+df_cc$variable <- rownames(df_cc)
+ci <- confint(lm_cc)
+df <- df_cc %>%
+  rename(estimate_cc = lm_cc$coefficients) %>%
+  mutate(LCI_cc = ci[, 1], 
+         UCI_cc = ci[, 2]) %>%
+  left_join(df_mi, by = "variable") %>%
+  mutate(`Estimate (CI)`= paste0(round(estimate_cc, 2), " (", round(LCI_cc, 2), "-", round(UCI_cc, 2), ")\n", 
+                                 round(estimate_mi, 2), " (", round(LCI_mi, 2), "-", round(UCI_mi, 2), ")"
+  )) %>%
+  slice(-1)
+ df$`                       ` <- rep("", times = nrow(df))
+
+ # setting layout specifications for the forest plot
+ tm <- forest_theme(base_size = 10,
+                     title_cex = 1,
+                     refline_lty = "dashed",
+                     #ci_pch = c(15, 18),
+                     ci_col = c("#377eb8",  "orange"),
+                     footnote_col = "blue",
+                     legend_name = "Analysis method",
+                     legend_value = c("Complete Case", "MI"),
+                     legend_position = "bottom", 
+                     title_just = "center") 
+ 
+forest(df[, c(2, 8, 9)],
+      est = list(df$estimate_cc, 
+                 df$estimate_mi),
+      lower = list(df$LCI_cc, 
+                   df$LCI_mi),
+      upper = list(df$UCI_cc, 
+                   df$UCI_mi),
+      ci_column = c(3),
+      ref_line = 0, 
+      theme = tm)
+}
+```
+
+
+
+# Multiple Imputation with MICE
+
+We want to analyze the prognostic impact of age, gender, BMI (centered), meat intake (proportions in previous month), education and ethnicity on systolic blood pressure using a linear regression model. We use the NHANES dataset for this (nhanesdata_v11a3.csv)
+
+1.  Look at the missing data descriptively (only those variables which we use in our regression analysis.):
+
+-   How many variables have missing data?
+-   What is the absolute and relative frequency of missing data in each variable?
+-   How is the missing data pattern?
+
+Hint: You may use the package ggmice for visualization:
+
+(<https://cran.r-project.org/web/packages/ggmice/vignettes/ggmice.html>)
+
+
+```{r}
+# read data set
+data <- read.csv("../data/nhanesdata_v11a3.csv")
+head(data)
+
+# Data processing
+## Format categorical variables as factors: this is important for MICE
+#  get variables with missing values
+## get absolute and relative frequencies of missing values in each variable. 
+## You may use the following code for this: 
+
+
+mis_abs <- data %>%
+  summarise(across(everything(), ~ sum(is.na(.)),  .names = "missing_{.col}"
+  )) %>%
+  pivot_longer(everything(),
+    names_to = "Variable",
+    values_to = "absolute_Count"
+  )
+
+mis_rel <- data %>%
+  summarise(across(everything(), ~
+    round((sum(is.na(.))) / nrow(data) * 100, 1),
+  .names = "missing_{.col}"
+  )) %>%
+  pivot_longer(everything(),
+    names_to = "Variable",
+    values_to = "Relative_freq[%]"
+  )
+
+miss_freq <- merge(mis_abs, mis_rel, by = "Variable")
+
+# flex
+```
+
+
+```{r}
+# use ggmice() to visualize the relationship between variables with/without missing values.
+# See the vingette of ggmice() for the correct syntax and examples. 
+# use visdat::vis_miss and md_pattern to visualize the missing data pattern
+
+
+library(mice)
+library(ggmice)
+library(ggplot2)
+library(visdat)
+
+
+# 1) 整体缺失可视化
+visdat::vis_miss(data)
+
+
+# 2) 缺失模式表/图
+mice::md.pattern(data, rotate.names = TRUE)
+
+
+# 3) 用 ggmice 看“变量取值”和“是否缺失”的关系
+
+# 例1：散点图
+plot_1 <- ggmice(data, aes(bmicenter, age)) +
+  geom_point(size = 2, alpha = 0.7) # the 
+
+ggmice(data, aes(x = age, y = bmi)) +
+  geom_point(size = 2, alpha = 0.7)
+
+ggmice(data, aes(x = rr_dia, y = bmi)) +
+  geom_point(size = 2, alpha = 0.7)
+
+
+# 例2：密度图
+plot_2 <- ggmice(data, aes(age, fill = factor(is.na(meat_prvmo2)))) +
+  geom_density(alpha = 0.3)
+
+plot_1 + plot_2
+
+
+# 例3：箱线图
+ggmice(data, aes(x = factor(educ), y = bmi)) +
+  geom_boxplot()
+
+
+
+# 例4：分面查看多个变量
+
+ggmice(data, aes(x = age, y = chl)) +
+  geom_point(alpha = 0.6) +
+  facet_wrap(~ .where)
+
+
+```
+
+Hint: Interpretation of the output of md_pattern:
+
+-   row: summarizes missing data patterns of observations 
+(number of the left side: how many observations have missing values in this combination of variables?, number of right handside: how many variables have a missing value?)
+-   which observations have missing in which variables (displayed in red)
+-   numbers on the right: number of variables with missing values
+-   numbers on the left: number of observations with this specific pattern of missing data
+
+
+
+
+
+2.  We assume that the missingness mechanism is MCAR and do therefore a complete case analysis. Calculate a linear regression with age, gender, BMI (centered), meat intake (proportions in previous month), education and ethnicity as independent variables and systolic blood pressure as dependent variable. How many observations have been deleted?
+
+```{r}
+
+data$ethnic <- factor(data$ethnic)
+data$educ <- factor(data$educ)
+
+mod.cc <- lm(rr_sys ~ age + male2 + bmicenter + meat_prvmo2 + educ + ethnic, data = data)
+
+summary(mod.cc)
+
+#   (973 observations deleted due to missingness)
+```
+
+3.  Now, we want to do MICE as sensitivity analysis. 
+
+Calculate MICE with 20 imputation using the following variables: age, gender, BMI (centered), meat intake (proportions in previous month), education and ethnicity, systolic blood pressure. 
+
+Please note: Under normal circumstances, one would discuss for each variable with missing data the likely reason for the missingness and assess whether the missing data mechanism can be assumed to be MCAR, MAR, or MNAR. 
+
+Based on this assessment, missing values would then be imputed using information from other observed variables that are correlated either with the missingness itself or with the variable containing missing data.)
+
+Use the following order:
+
+a.  Generate the prediction matrix
+
+b.  Choose a suitable imputation method for every variable (what is the default by R?)
+
+c.  Generate multiple imputed datasets
+
+d.  Look at the diagnostics (did the algorithm converge? Are the imputed values plausible?
+
+e.  Generate the prediction matrix
+
+
+Hint:
+-   The predictor matrix controls which variables are used to impute missing values for each incomplete variable.
+    -   Rows represent the variables with missing values
+    -   Columns represent the predictor variables that can be used for imputation
+-   A value of 1 in the matrix means that the column variable is used as a predictor for the row variable, while 0 means it is not used
+
+
+
+a.  Generate the prediction matrix
+
+```{r}
+
+# https://search.r-project.org/CRAN/refmans/mice/html/mice.html
+?mice()
+#library(mice)
+
+pred.matrix <- make.predictorMatrix(data)
+pred.matrix
+
+```
+
+b.  Choose a suitable imputation method for every variable (what is the default by R?)
+
+```{r}
+
+# See https://search.r-project.org/CRAN/refmans/mice/html/mice.html 
+# which method can be applied to which data.type
+
+# Those methods are available
+methods(mice)
+
+# default in R, this helps us to identify method:
+(meth <- make.method(data))
+
+#pmm : Predictive Mean Matching
+#polyreg: Polytomous logistic regression
+
+
+```
+
+c.  Generate multiple imputed datasets
+
+```{r}
+
+dat_mi1 <- mice(data, predictorMatrix = pred.matrix, seed=2, m = 20, maxit = 5, print = FALSE)
+
+# take a look at completed (i.e. imputed) data set:
+# complete data set 2:
+head(complete(dat_mi1, action = 2), 3)
+
+
+# you can also convert this to a long format for data filtering, data manipulation or calculation of additional variables
+
+long_mi <- complete(dat_mi1, action = "long", include = TRUE) # include = False, then we don't have the original data here
+
+long_mi %>%
+  dplyr::select((ncol(long_mi) - 1): ncol(long_mi), everything()) %>%
+  head(5)
+
+# back to the mids object
+
+mids_obj <- as.mids(long_mi)
+
+
+```
+
+d.  Look at the diagnostics (did the algorithm converge? Are the imputed values plausible?
+
+```{r}
+
+stripplot()
+densityplot()
+bwplot()
+# As alternative, you can also work with ggmice()
+
+# did the algorithm converge?
+plot()
+
+```
+
+4.  Re-analyse the impact of the prognostic factors on systolic blood pressure using the MI datasets.
+
+```{r}
+mod_mi1 <- with(dat_mi1, 
+                lm())
+
+
+# get the pooled coefficients (remember: Rubin's rule)
+summary(pool(mod_mi1))
+```
+
+5.  When we run the multiple imputation procedure with m = 5, we get for meat intake the the following coefficients and standard errors:
+
+    | Imputation mumber | Estimate (beta) | standard error |
+    |-------------------|-----------------|----------------|
+    | 1                 | 0.027           | 0.0016         |
+    | 2                 | 0.003           | 0.0015         |
+    | 3                 | 0.032           | 0.0170         |
+    | 4                 | 0.026           | 0.0160         |
+    | 5                 | 0.002           | 0.0150         |
+    
+    Calculate the pooled beta-coefficient and the pooled standard error. You may use paper and pencil to solve this task.
+
+6.  How many imputations we need for a FMI of 0.44 to have a relative efficiency of at least 0.95. Hint: The relative efficiency compares the variance of your pooled estimate with the variance you would get if you had an infinite number of imputations: $RE = \frac{Variance with infinite imputation}{Variance with finite imputation}$. This means that a relative efficiency of 0.9 means a relative increase of the variance for m imputation of $\frac{1}{0.95} = 1.052 \approx 5\%$. You may use paper and pencil to solve this task.
+
+7.  Compare the output of the complete case analysis and multiple imputation Hint: For the comparison, use the the function compare_fp() from line 23
+
+```{r}
+
+
+```

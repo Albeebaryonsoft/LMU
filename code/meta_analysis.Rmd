@@ -3,7 +3,7 @@ title: "meta_analysis"
 output: html_document
 ---
 
-# basics
+# basics and publicationbased MA
 ```{r}
 install.packages(c("dplyr", "meta", "kable"))
 
@@ -39,15 +39,6 @@ metagen_results_log <- metagen(log_HR, log_se, data = data)
 forest(metagen_results_log)
 
 
-ss<-data$log_se
-
-ww<-1/(ss*ss)
-ww
-ww/sum(ww)
-exp(-0.29) 
-
-# What to do with heterogeneity? Do regression to see what factors matter
-
 ```
 
 ```{r}
@@ -60,6 +51,7 @@ metagen_results_backtrans <- metagen(log_HR,
 forest(metagen_results_backtrans)
 
 # metagen can apply different methods, but we never know the default setting. So be careful. 
+# The results look the same as the paper by author. 
 ```
 ```{r}
 metagen(log_HR, 
@@ -68,7 +60,12 @@ metagen(log_HR,
         backtransf = T, 
         func.backtransf = exp, 
         method.tau = "DL")
+
+# method to estimat tau: DerSimonian–Laird
 ```
+
+
+
 ```{r}
 metagen_results <- metagen(log_HR, 
                            log_se, 
@@ -79,11 +76,10 @@ metagen_results <- metagen(log_HR,
 metagen_results
 
 
+# Question 2 is a exam question. 
 # The heterogeneity is not significant. 
 # IQWIG: Hartung-knapp is recommended. The outcome they want to see is mostly OR and HR.
-# Question 2 is a exam question. 
-
-
+# We choose to use REML, which has been recommended as the default estimator r for estimating the heterogeneity “Restricted maximum-likelihood estimator for tau^2”
 
 ```
 
@@ -92,14 +88,17 @@ metagen_results
 estimates(metagen_results, prediction = TRUE)
 
 ```
+
+
 ```{r}
 funnel(metagen_results)
 
 # The large the number of the studys, the closer the results will get close to the centre. 
 ```
 
-# two-stage IPDMA
 
+
+# two-stage IPDMA
 ```{r}
 install.packages("metafor")
 install.packages("lme4")
@@ -243,16 +242,21 @@ with(un.ad.results, forest(x = logRR, sei = logRR.se,
 ```
 
 ```{r}
+
 fe.2stage <- rma(yi = logRR, sei = logRR.se, method = "FE", data = ad.results)
+
 summary(fe.2stage)
 
 ```
 ```{r}
+
 re.2stage <- rma(yi = logRR, sei = logRR.se, method = "REML", data = ad.results)
+
 summary(re.2stage)
 
 ```
 ```{r}
+
 re.2stage.knha <- rma(yi = logRR, sei = logRR.se, method = "REML", test = "knha", 
                       data = ad.results)
 summary(re.2stage.knha)
@@ -269,11 +273,14 @@ exp(c(-1.0698092,0.1370333))
 
 ```
 ```{r}
+
 mean.age <- mean.bilat_0 <- array(NA, dim=length(studies))
+
 for (i in 1:length(studies)) {
   mean.age[i] <- mean(ds.final[ds.final$STUDY==studies[i], "AGE"])
   mean.bilat_0[i] <- mean(ds.final[ds.final$STUDY==studies[i], "BILAT_0"])
 }
+
 ad.results <- cbind(ad.results, mean.age, mean.bilat_0)
 ad.results
 
@@ -286,9 +293,11 @@ remr.bilat0 <- rma(yi = logRR, sei = logRR.se, mods = mean.bilat_0,
 summary(remr.bilat0)
 
 plot(lm(ad.results))
+
 ```
 
 ```{r}
+
 ### calculate predicted RR for the prevalence bilateral AOM of 0 to 1, in steps of .01
 preds <- predict(remr.bilat0, newmods=seq(0, 1, 0.01), transf=exp)
  

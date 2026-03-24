@@ -1,0 +1,199 @@
+---
+title: "cluster_randomized_trial"
+output: html_document
+---
+
+
+
+```{r}
+
+tab <- matrix(
+  c(179, 18, 32, 118),
+  nrow = 2,
+  byrow = TRUE,
+  dimnames = list(
+    "group"  = c("Intervention", "Control"),
+    "bmigrp" = c("Pad(0)", "Pad (1)")
+  )
+)
+
+tab
+addmargins(tab)
+
+chisq.test(tab)
+
+```
+```{r}
+
+OR <- (179 * 118) / (32 * 18)
+OR
+
+log_OR <- log(OR)
+SE_log_OR <- sqrt(1/179 + 1/31 + 1/18 + 1/11)
+CI_lower <- exp(log_OR - 1.96 * SE_log_OR)
+CI_upper <- exp(log_OR + 1.96 * SE_log_OR)
+
+cat("OR:", round(OR, 3), "\n")
+cat("95% CI:", round(CI_lower, 3), "-", round(CI_upper, 3))
+
+# Risk (Probability)
+risk_control  <- 179 / (179 + 31)   # P(BMI<29.5 | Control)
+risk_training <- 118  / (118  + 31)   # P(BMI<29.5 | Training)
+
+risk_control
+risk_training
+
+# Risk Ratio (RR)
+RR <- risk_control / risk_training
+
+cat("Risk Control:", round(risk_control, 3), "\n")
+cat("Risk Training:", round(risk_training, 3), "\n")
+cat("Risk Ratio:", round(RR, 3), "\n")
+
+```
+
+
+```{r}
+
+# data bmi from paper
+
+str(bmi)
+tt <- table(bmi$praccode)
+length(tt)
+table(bmi$praccode, bmi$Group)
+
+
+# to check if there is diff between age in two groups.
+
+library(lme4)
+
+age.lme <- lmer(
+  age ~ Group + (1 | praccode),
+  data = bmi,   
+  REML = FALSE  
+)
+summary(age.lme)
+
+
+# intervention group is 0.53 years older than control group, but 
+
+
+confint(age.lme)
+boxplot(tapply(bmi$age, bmi$praccode, mean.na.rm=T))
+
+# check if gender balanced
+
+gender.lme <- glmer(
+  Gender ~ Group + (1 | praccode),
+  data = bmi,
+  family = binomial)
+summary(gender.lme)
+
+confint(gender.lme)
+
+# no difference, log odds only 0.07
+
+
+```
+```{r}
+
+
+bmi.1.lme <- lmer(Bmi1yr ~ Group + (1 | praccode),
+  data = bmi )
+
+summary(bmi.1.lme )
+# around 2 points higher in intervention group, which we do not want to see. 
+
+bmi.2.lme <- lmer(Bmi1yr ~ Group + Bmibase + (1 | praccode),
+  data = bmi )
+
+summary(bmi.2.lme )
+# Bmi1yr = 0.95 * Bmibase + 0.7* Intervention +1.6
+
+
+```
+```{r}
+
+# To check if the random effects from practices is normally distributed. 
+
+ranef(bmi.2.lme)
+boxplot(ranef(bmi.2.lme)$praccode)
+xx <- unlist(ranef(bmi.2.lme)$praccode)
+
+# Residual normality
+qqnorm(xx )
+qqline(xx , col = "red")
+
+# model fit okay
+
+```
+
+```{r}
+
+# To check the residuals of individuals after controling for fixed effect and random effect
+# QQ plot,looks nice
+
+rr <- residuals(bmi.2.lme)
+
+
+qqnorm(rr)
+qqline(rr, col = "red")
+
+
+
+```
+```{r}
+bmi$diff <- bmi$Bmi1yr - bmi$Bmibase
+
+bmi.4.lme <- lmer(diff ~ Group + Bmibase + age + Gender + (1 | praccode),
+  data = bmi)
+
+summary(bmi.4.lme)
+
+```
+```{r}
+
+# the higher the correlation between baseline bmi and 1 year bmi, the smaller variance, the less sample size needed.
+
+
+ind1 <- bmi$Group == 0
+
+plot(bmi$Bmibase[ind1],bmi$Bmi1yr[ind1], col=order(bmi$praccode[ind1]))
+
+cor(bmi$Bmibase[ind1],bmi$Bmi1yr[ind1], use = "complete.obs")
+
+
+ind2 <- bmi$Group == 1
+
+plot(bmi$Bmibase[ind2],bmi$Bmi1yr[ind2], col=order(bmi$praccode[ind]))
+
+cor(bmi$Bmibase[ind2],bmi$Bmi1yr[ind2], use = "complete.obs")
+
+
+# as we can see the cor is even better in the intervention group. 
+# var (x-y) = var(x) + var(y)  - 2*Cov(x,y) 
+
+
+
+
+```
+```{r}
+# 检查合并数据的 bmi baseline vs 1 year after
+
+plot(bmi$Bmibase, bmi$Bmi1yr,
+     col = order(bmi$praccode),
+     xlab = "BMI Baseline",
+     ylab = "BMI 1yr",
+     main = paste0("r = ", round(cor(bmi$Bmibase, bmi$Bmi1yr, use = "complete.obs"), 3)))
+
+abline(lm(bmi$Bmi1yr ~ bmi$Bmibase, na.action = na.omit), col = "black", lwd = 2)
+
+
+cor(bmi$Bmibase, bmi$Bmi1yr, use = "complete.obs")
+
+
+```
+
+
+
+

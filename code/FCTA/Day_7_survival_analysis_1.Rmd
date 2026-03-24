@@ -98,7 +98,8 @@ km_plot_by_sex <- ggsurvplot(km_by_sex,
 
 km_plot_by_sex
 
-coxph(Surv(time, status) ~ sex, data=d) # HR = exp (coef) = 0.7333, the male has 0.733 decreased risk of dying. 
+coxph(Surv(time, status) ~ sex, data=d) 
+# HR = exp (coef) = 0.7333, the male has 0.733 decreased risk of dying. 
 
 
 #7.1.5

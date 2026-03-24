@@ -1,0 +1,98 @@
+---
+title: "advanced_cox_regression"
+output: html_document
+---
+
+```{r}
+d1 <- read.csv("../data/nepalDHS.csv")
+
+
+d2 <- read.csv("../data/SanDiegoBleedingStudy2.csv")
+
+
+```
+```{r}
+
+head(d2)
+summary(d2)
+
+# here, death is the censoring variable. 
+# the max days is 6303, so that the last patients didnt die.
+# death: 76% patients had an event because the mean is 0.7678
+# treatc: nearly 50% get the new treatment.
+
+```
+
+
+```{r}
+
+library(survival)
+library(survminer)
+
+coxph1 <-coxph(Surv(days, death) ~ treatc, data = d2)
+coxph1
+
+
+# adjust for childs, assume equal baseline hazard, constant
+coxph2 <-coxph(Surv(days, death) ~ treatc + childs, data = d2)
+coxph2
+
+# include child score as strata, this would be different from addiing it as a covariates.
+# here we assume they have different baseline risk. h0(t)
+coxph3 <-coxph(Surv(days, death) ~ treatc + strata(childs), data = d2)
+coxph3
+
+AIC(coxph1,coxph2,coxph3)
+
+
+# include age as strata, but problematic because too many strata
+coxph4 <-coxph(Surv(days, death) ~ treatc + strata(age), data = d2)
+coxph4
+
+
+```
+
+
+```{r}
+
+library(ggplot2)
+
+KMfit1 <- survfit(Surv(days, death) ~ treatc, data = d2)
+d2.treat <- data.frame(treatc = c(0,1))
+
+par(mfrow = c(1,2))
+
+plot(KMfit1,
+     col = c("steelblue", "firebrick"),
+     lwd = 2,
+     main = "KM")
+
+plot(survfit(coxph1, newdata = d2.treat),
+     col = c("steelblue", "firebrick"),
+     lwd = 2,
+     main = "Cox")
+
+par(mfrow = c(1,1))
+
+
+
+plot(survfit(coxph3),xscale=365.25, xlab = "Years",
+ylab="Survival", lwd=3, col=c("green", "red", "blue"),
+main="SDBEV study:Predicted Survival by Child Score")
+
+```
+```{r}
+
+# zph is used to exam the assuption: if the beta is time-varying 
+# term false, show all outcomes. 
+
+
+plot(cox.zph(coxph2, transform = "km", terms = FALSE))
+plot(cox.zph(coxph2, transform = "identity", terms = FALSE))
+plot(cox.zph(coxph2, transform = function(days) days**2, terms = FALSE))
+
+
+how to deal with the cox regression
+survival, hazard
+```
+

@@ -17,6 +17,7 @@ require(patchwork)
 require(forestploter)
 ```
 
+
 ```{r function forest plot}
 # Function to compare later the output of the linear regression of a complete case analysis and with multiple imputation
 
@@ -88,18 +89,37 @@ Hint: You may use the package ggmice for visualization:
 
 
 ```{r}
-# read data set
-data <- read.csv("../data/nhanesdata_v11a3.csv")
-head(data)
 
+
+dat <- read.csv("../data/nhanesdata_v11a3.csv")
+summary(dat)
+
+```
+
+
+```{r}
 # Data processing
 ## Format categorical variables as factors: this is important for MICE
-#  get variables with missing values
+
+dat <- dat %>%
+mutate_at(c("educ", "ethnic", "age_cat", "meat_cat", "male2"), as.factor)%>%
+select(rr_sys, age, male2, bmicenter, meat_prvmo2, educ, ethnic) %>%
+filter(!is.na(rr_sys))
+
+## get variables with missing values
+## here we only get three variables that contain missing value among variables we focus on. 
+
+colnames(dat)[colSums(is.na(dat)) != 0]
+
+```
+
+
+```{r}
+## we alread selected several variable as predictors 
+
 ## get absolute and relative frequencies of missing values in each variable. 
-## You may use the following code for this: 
 
-
-mis_abs <- data %>%
+mis_abs <- dat %>%
   summarise(across(everything(), ~ sum(is.na(.)),  .names = "missing_{.col}"
   )) %>%
   pivot_longer(everything(),
@@ -107,7 +127,7 @@ mis_abs <- data %>%
     values_to = "absolute_Count"
   )
 
-mis_rel <- data %>%
+mis_rel <- dat %>%
   summarise(across(everything(), ~
     round((sum(is.na(.))) / nrow(data) * 100, 1),
   .names = "missing_{.col}"
@@ -119,7 +139,39 @@ mis_rel <- data %>%
 
 miss_freq <- merge(mis_abs, mis_rel, by = "Variable")
 
-# flex
+
+flextable(miss_freq) %>%
+width(j = 1:3, width = 3, unit = "cm") %>%
+align(j = 2:3, align = "center", part = "all")
+
+# this is a useful package for visualization. 
+
+```
+
+```{r}
+
+plot_1 <- ggmice(dat, aes(bmicenter, age)) +
+   geom_point()
+plot_2 <- ggmice(dat, aes(age, fill = factor(is.na(meat_prvmo2),
+   labels = c("observed meat intake", "missing meat intake")
+   ))) + geom_density(alpha = 0.3)
+
+plot_1 + plot_2
+
+
+plot_3 <- ggmice(dat, aes(male2)) +
+geom_bar(alpha = 0.3) +
+facet_wrap(~ factor(is.na(meat_prvmo2),
+labels = c("observed meat intake", "missing meat intake")
+))
+plot_4 <- ggmice(dat, aes(male2)) +
+geom_bar(alpha = 0.3) +
+facet_wrap(~ factor(is.na(bmicenter),
+labels = c("observed BMI", "missing BMI")
+))
+plot_3 + plot_4
+
+
 ```
 
 
@@ -135,45 +187,11 @@ library(ggplot2)
 library(visdat)
 
 
-# 1) 整体缺失可视化
-visdat::vis_miss(data)
+# 1) check complete cases
+visdat::vis_miss(dat)
+mice::md.pattern(dat, rotate.names = TRUE)
 
 
-# 2) 缺失模式表/图
-mice::md.pattern(data, rotate.names = TRUE)
-
-
-# 3) 用 ggmice 看“变量取值”和“是否缺失”的关系
-
-# 例1：散点图
-plot_1 <- ggmice(data, aes(bmicenter, age)) +
-  geom_point(size = 2, alpha = 0.7) # the 
-
-ggmice(data, aes(x = age, y = bmi)) +
-  geom_point(size = 2, alpha = 0.7)
-
-ggmice(data, aes(x = rr_dia, y = bmi)) +
-  geom_point(size = 2, alpha = 0.7)
-
-
-# 例2：密度图
-plot_2 <- ggmice(data, aes(age, fill = factor(is.na(meat_prvmo2)))) +
-  geom_density(alpha = 0.3)
-
-plot_1 + plot_2
-
-
-# 例3：箱线图
-ggmice(data, aes(x = factor(educ), y = bmi)) +
-  geom_boxplot()
-
-
-
-# 例4：分面查看多个变量
-
-ggmice(data, aes(x = age, y = chl)) +
-  geom_point(alpha = 0.6) +
-  facet_wrap(~ .where)
 
 
 ```
@@ -189,19 +207,17 @@ Hint: Interpretation of the output of md_pattern:
 
 
 
-
 2.  We assume that the missingness mechanism is MCAR and do therefore a complete case analysis. Calculate a linear regression with age, gender, BMI (centered), meat intake (proportions in previous month), education and ethnicity as independent variables and systolic blood pressure as dependent variable. How many observations have been deleted?
 
 ```{r}
 
-data$ethnic <- factor(data$ethnic)
-data$educ <- factor(data$educ)
-
-mod.cc <- lm(rr_sys ~ age + male2 + bmicenter + meat_prvmo2 + educ + ethnic, data = data)
-
+mod.cc <- lm(rr_sys~ age + male2 + bmicenter +
+meat_prvmo2 + educ + ethnic,
+data = dat)
 summary(mod.cc)
 
-#   (973 observations deleted due to missingness)
+
+# -> 753 observations deleted due to missingness (26%)
 ```
 
 3.  Now, we want to do MICE as sensitivity analysis. 
@@ -238,13 +254,22 @@ a.  Generate the prediction matrix
 ```{r}
 
 # https://search.r-project.org/CRAN/refmans/mice/html/mice.html
-?mice()
+
 #library(mice)
 
-pred.matrix <- make.predictorMatrix(data)
+pred.matrix <- make.predictorMatrix(dat)
+pred.matrix[, !(colnames(pred.matrix) %in%
+c("rr_sys", "rr_dia", "educ", "bmicenter","meat_prvmo2"))] <- 0
 pred.matrix
 
+# even though bmi and educ do not need inputation, mice does it to both of them too. 
 ```
+The predictor matrix controls which variables are used to impute missing values for each incomplete
+variable.
+– Rows represent the variables with missing values
+– Columns represent the predictor variables that can be used for imputation
+• A value of 1 in the matrix means that the column variable is used as a predictor for the row variable,while 0 means it is not used
+
 
 b.  Choose a suitable imputation method for every variable (what is the default by R?)
 
@@ -253,11 +278,14 @@ b.  Choose a suitable imputation method for every variable (what is the default 
 # See https://search.r-project.org/CRAN/refmans/mice/html/mice.html 
 # which method can be applied to which data.type
 
-# Those methods are available
+meth <- make.method(dat)
+# if you want to change the method:
+#meth["bmicenter"] <- "norm"
+# overview over available methods: ?mice (Scroll documentation down till Details) or 
+
 methods(mice)
 
-# default in R, this helps us to identify method:
-(meth <- make.method(data))
+
 
 #pmm : Predictive Mean Matching
 #polyreg: Polytomous logistic regression
@@ -269,13 +297,15 @@ c.  Generate multiple imputed datasets
 
 ```{r}
 
-dat_mi1 <- mice(data, predictorMatrix = pred.matrix, seed=2, m = 20, maxit = 5, print = FALSE)
-
+dat_mi1 <- mice(dat,predictorMatrix = pred.matrix,seed = 2,m = 20,maxit = 5,print = FALSE)
 # take a look at completed (i.e. imputed) data set:
-# complete data set 2:
+# complete data set 1:
 head(complete(dat_mi1, action = 2), 3)
 
+```
 
+
+```{r}
 # you can also convert this to a long format for data filtering, data manipulation or calculation of additional variables
 
 long_mi <- complete(dat_mi1, action = "long", include = TRUE) # include = False, then we don't have the original data here
@@ -284,36 +314,59 @@ long_mi %>%
   dplyr::select((ncol(long_mi) - 1): ncol(long_mi), everything()) %>%
   head(5)
 
+
 # back to the mids object
 
 mids_obj <- as.mids(long_mi)
 
+# below is the original data set, imp = 0, that is why there are NA.
+# if we check imp = 1, there wont be any NA
+
+long_mi %>% filter(.imp == 1) %>% summarise(across(everything(), ~sum(is.na(.))))
 
 ```
 
-d.  Look at the diagnostics (did the algorithm converge? Are the imputed values plausible?
+d.  Look at the diagnostics
 
 ```{r}
 
-stripplot()
-densityplot()
-bwplot()
-# As alternative, you can also work with ggmice()
+#  How did the algorithm converge? Are the imputed values plausible?
 
-# did the algorithm converge?
-plot()
+png("stripplot.png", width = 600, height = 350, res = 100)
+print(stripplot(dat_mi1))
+dev.off()
+knitr::include_graphics("stripplot.png")
+
+
+png("densityplot.png", width = 600, height = 350, res = 100)
+print(densityplot(dat_mi1))
+dev.off()
+knitr::include_graphics("densityplot.png")
+
+
+png("bwplot.png", width = 600, height = 400, res = 100)
+print(bwplot(dat_mi1))
+dev.off()
+knitr::include_graphics("bwplot.png")
+
+plot(dat_mi1)
+
+# the converge by meat_provmo2 is not perfect; however, we do not take any action here.
 
 ```
 
 4.  Re-analyse the impact of the prognostic factors on systolic blood pressure using the MI datasets.
 
 ```{r}
-mod_mi1 <- with(dat_mi1, 
-                lm())
+mod_mi1 <- with(dat_mi1,lm(rr_sys~ age + male2 + bmicenter + meat_prvmo2 + educ + ethnic))
 
+# Display the pooled estimate, the variance decomposition in within and between variance and the FMI
 
-# get the pooled coefficients (remember: Rubin's rule)
-summary(pool(mod_mi1))
+pool(mod_mi1)
+
+# pooled estimate is calculated based on Rubin's rule.
+# exam: pooed estimate, variance (between and within groups)
+
 ```
 
 5.  When we run the multiple imputation procedure with m = 5, we get for meat intake the the following coefficients and standard errors:
@@ -327,12 +380,77 @@ summary(pool(mod_mi1))
     | 5                 | 0.002           | 0.0150         |
     
     Calculate the pooled beta-coefficient and the pooled standard error. You may use paper and pencil to solve this task.
+    
+see solution
 
 6.  How many imputations we need for a FMI of 0.44 to have a relative efficiency of at least 0.95. Hint: The relative efficiency compares the variance of your pooled estimate with the variance you would get if you had an infinite number of imputations: $RE = \frac{Variance with infinite imputation}{Variance with finite imputation}$. This means that a relative efficiency of 0.9 means a relative increase of the variance for m imputation of $\frac{1}{0.95} = 1.052 \approx 5\%$. You may use paper and pencil to solve this task.
+
+see solution.
+
 
 7.  Compare the output of the complete case analysis and multiple imputation Hint: For the comparison, use the the function compare_fp() from line 23
 
 ```{r}
+
+library(dplyr)
+sum_mi <- summary(pool(mod_mi1), conf.int = TRUE)
+
+df_mi <- data.frame(
+  variable = sum_mi$term,
+  estimate_mi = sum_mi$estimate,
+  LCI_mi = sum_mi$`2.5 %`,
+  UCI_mi = sum_mi$`97.5 %`
+)
+
+
+df_cc <- as.data.frame(mod.cc$coefficients)
+colnames(df_cc)[1] <- "estimate_cc"   # 直接在这里改好列名
+df_cc$variable <- rownames(df_cc)
+ci <- confint(mod.cc)
+
+df <- df_cc %>%
+  mutate(LCI_cc = ci[, 1],
+         UCI_cc = ci[, 2]) %>%
+  left_join(df_mi, by = "variable") %>%
+  mutate(`Estimate (CI)` = paste0(round(estimate_cc, 2), " (",
+                                   round(LCI_cc, 2), "-", round(UCI_cc, 2),
+                                   "\n",
+                                   round(estimate_mi, 2), " (",
+                                   round(LCI_mi, 2), "-",
+                                   round(UCI_mi, 2), ")")
+  ) %>%
+  slice(-1)
+
+df$` ` <- rep("", times = nrow(df))
+
+
+# setting layout specifications for the forest plot
+tm <- forest_theme(base_size = 10,
+                   title_cex = 1,
+                   refline_lty = "dashed",
+                   ci_pch = c(15, 18),
+                   ci_col = c("#377eb8", "orange"),
+                   footnote_col = "blue",
+                   legend_name = "Analysis method",
+                   legend_value = c("Complete Case", "MI"),
+                   legend_position = "bottom",
+                   title_just = "center")
+
+# 控制各列宽度比例
+forest(df[, c(2, 8, 9)],
+       est = list(df$estimate_cc,
+                  df$estimate_mi),
+       lower = list(df$LCI_cc,
+                    df$LCI_mi),
+       upper = list(df$UCI_cc,
+                    df$UCI_mi),
+       ci_column = c(3),
+       ref_line = 0,
+       theme = tm,
+       # 关键参数：
+       xlim = c(-3, 3),          # 手动设置 x 轴范围，根据你的数据调整
+       ticks_at = c(-2, -1, 0, 1, 2),  # x 轴刻度
+       widths = c(3, 1.5, 2))    # 三列宽度比例：文字列、CI文本列、图形列
 
 
 ```

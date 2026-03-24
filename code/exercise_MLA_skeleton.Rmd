@@ -1,0 +1,337 @@
+---
+title: "Exercise in R ClinEpi II-Multilevel models"
+output: html_document
+---
+
+```{r}
+
+# Packages that need to be installed
+
+
+require(reshape)
+require(ggplot2)
+require(lme4)
+require(dplyr)
+require(tidyr)
+require(patchwork)
+require(nlme)
+
+```
+
+Researchers want to know, whether Routine care + additional training for practitioners in terms of a patient-centered care would lead to a higher BMI reduction compared routine care alone. (see Kinmonth et al. 1998). To answer this question, the randomize practices to either the intervention arm or the control arm (= cluster randomization, one practice is a cluster). Medical doctors and nurses in the intervention arm receive 1,5 days of additional training in patient centered care. We will analyze this research question now based on a simulated dataset containing the following variables:
+
+1.  Import the data analysis_bmi.csv in R. Transform all categorical variables into factors. Create the variable bmi_diff , which is the difference between the BMI measure as baseline and after one year.
+
+```{r,  message = FALSE, warning=FALSE, include=TRUE, results='hide'}
+# Read data
+
+#main_path <- "/ClinEpi_II_2026/multilevel_models"
+#dattab <- read.csv(paste0(main_path, "/analysis_bmi.csv"), sep = ",")
+
+dattab <- read.csv("../data/analysis_bmi.csv")
+
+# Define data type for each column
+
+dattab <- dattab %>% mutate_at(c(
+    "patient", "praccode", "gender", "group", "bmigrp", "pracsize"
+  ), as.factor) %>%
+  mutate(bmi_diff = bmi1yr - bmibase)
+
+dattab
+
+
+```
+
+2.  Have a first look at the data and answer those question:
+
+-   What is the data type for each variable?
+-   What is its mean (min-max) or absolute and relative frequency?
+-   How many missing values are there in each variable?
+-   Which variables have been measures for each patients (subject level), which on the cluster level? Which variables are the outcome?
+
+```{r,  message = FALSE, warning=FALSE, include=TRUE, results='hide'}
+
+# Data type
+sapply(dattab, function(col) class(col))
+# Mean/abolute and relative frequency
+summary(dattab)
+# how many unique values per variable?
+sapply(dattab, function(col) length(unique(col)))
+
+table(dattab$praccode,dattab$group)
+# practice were randomly assigned to either treatment or control
+
+
+# subject level: patient ID, gender, bmibase, age, bmi1yr, bmigrp,bmi_diff
+# cluster level: praccode, group, pracsize
+```
+
+3.  Graphical visualization: Plot boxplots for the BMI difference stratified by:
+
+-   treatment group
+-   treatment group and practice
+
+```{r,  message = FALSE, warning=FALSE, include=TRUE, fig.width=5, fig.height=5, out.width="60%"}
+
+
+# Boxplots: BMI difference (1-yr vs. baseline) stratified by treatment
+
+ggplot(
+  data = dattab,
+  mapping = aes(
+    x = group,
+    y = bmi_diff, 
+    fill = group)) +
+   labs(color = "Time of measurement") +
+  geom_boxplot() +
+  geom_jitter(color = "grey") +
+  theme_bw() +
+  scale_fill_manual(
+    values = c("0" = "#1b9e77", "1" = "#d95f02"),
+    labels = c("0" = "Control", "1" = "Treatment"),
+    name = "Group"
+  ) +
+  scale_x_discrete(
+    labels = c("0" = "Control", "1" = "Treatment")
+  ) +
+  theme(legend.position = "none")
+
+ # Complete this for additional stratificaiton by practice (Hint: use facet_wrap)
+
+
+```
+```{r}
+# Boxplots: BMI at baseline and after one year stratified by treatment
+# Only for control group
+
+plot_control <- ggplot(
+    data    = dattab[dattab$group == 0, ],
+    mapping = aes(x = group, y = bmi_diff, fill = group)
+  ) +
+  geom_boxplot() +
+  geom_jitter(color = "grey") +
+  scale_fill_manual(
+    values = c("0" = "#1b9e77", "1" = "#d95f02"),
+    labels = c("0" = "Control", "1" = "Treatment"),
+    name   = "Group"
+  ) +
+  scale_x_discrete(
+    labels = c("0" = "Control", "1" = "Treatment")
+  ) +
+  labs(color = "Time of measurement") +
+  facet_wrap(~praccode, scales = "fixed", nrow = 5) +
+  coord_cartesian(ylim = c(-10, NA)) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+plot_control
+
+# Why we need to run this facet_wrap? 
+# To assess whether the clustering structure in the data is consequential before modelling.
+# If the boxplots vary substantially across practices — in terms of median position or spread — this suggests non-negligible between-cluster variance, making a multilevel model necessary. Conversely, if the distributions are largely similar across practices, the ICC is likely close to zero and the added complexity of a multilevel model would offer little advantage over standard regression. If practices look largely homogeneous, a simpler model may suffice.
+```
+
+
+```{r}
+
+plot_treatment <- ggplot(
+    data    = dattab[dattab$group == 1, ],
+    mapping = aes(x = group, y = bmi_diff, fill = group)
+  ) +
+  geom_boxplot() +
+  geom_jitter(color = "grey") +
+  scale_fill_manual(
+    values = c("0" = "#1b9e77", "1" = "#d95f02"),
+    labels = c("0" = "Control", "1" = "Treatment"),
+    name   = "Group"
+  ) +
+  scale_x_discrete(
+    labels = c("0" = "Control", "1" = "Treatment")
+  ) +
+  labs(color = "Time of measurement") +
+  facet_wrap(~praccode, scales = "fixed", nrow = 5) +
+  coord_cartesian(ylim = c(-10, NA)) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+plot_treatment
+
+```
+
+4.  Now, we want to investigate, whether the additional patient-centered care leads to a higher BMI reduction compared to standard care alone. What kind of analysis would you choose here? Why?
+
+see solution
+
+5.  We want to adjust the treatment effect for the following covariables: gender, BMI measure at baseline, age and practice size. The practices should be modeled as random intercept. Write down the regression equation and specify which parameters are the fixed effects and which the random effects.
+
+see solution
+
+6.  There exist many packages in R for modeling multilevel regressions. All return valid results, we will focus here on the package lme4 and nlme. Calculate with these packages now the linear regression with the random intercept. Interpret the fixed and random effects.
+
+```{r}
+
+# MLA, because individuals are clustered and idd assuptions are violated.
+library(lme4)
+
+M0 <- lme4::lmer(formula = bmi_diff~ group + pracsize + gender + bmibase + age
++ (1 | praccode), data = dattab)
+
+summary(M0)
+confint(M0)
+
+
+```
+
+
+```{r}
+# use this package to get p value
+
+library(lmerTest)
+
+M1 <- lmer(bmi_diff~ group + pracsize + gender + bmibase + age
++ (1 | praccode),
+data = dattab)
+summary(M1)
+
+
+```
+
+
+
+```{r,  message = FALSE, warning=FALSE, include=TRUE}
+
+# Solution: Likilihood ratio test
+# e.g. has group an significant influence?
+
+M_red <- lme4::lmer(formula = bmi_diff~ pracsize + gender + bmibase + age
++ (1 | praccode), data = dattab, REML = FALSE)
+
+M_full <- lme4::lmer(formula = bmi_diff~ group + pracsize + gender + bmibase + age
++ (1 | praccode), data = dattab, REML = FALSE)
+
+# CAVE: For likelihood-ratio tests to be meaningfully defined, the two models should be nested.
+
+anova(M_full, M_red)
+
+```
+```{r}
+
+library(nlme)
+
+M0.nlme <- lme(fixed = bmi_diff~ group + pracsize + gender + bmibase + age, random =~ 1 | praccode, data = dattab, na.action = "na.omit")
+summary(M0.nlme)
+
+# 这个包，结果差不多
+```
+
+
+7.  Test the assumptions for LMMs.
+
+```{r,  message = FALSE, warning=FALSE, include=TRUE, tidy=FALSE}
+
+library(ggplot2)
+
+# 1. Normality of random effects
+ggplot(random, aes(x = Intercept)) +
+  geom_density(fill = "#1b9e77", alpha = 0.5) +
+  stat_function(fun = dnorm, args = list(mean = 0, sd = sd), 
+                color = "red", linetype = "dashed", linewidth = 1) +
+  labs(title = "Random Intercepts vs Normal Distribution",
+       x = "Random Intercept (u0j)", y = "Density") +
+  theme_bw()
+
+
+# 1. Normality of random effects (code form Katja)
+random <- ranef(M0)$praccode
+
+# Result of ranef: Extract the practice-specific deviation from the overall intercecpt
+random$praccode <- as.factor(rownames(random))
+
+colnames(random)[1] <- "Intercept"
+sd <- as.data.frame(VarCorr(M0))[1, 5] # standard deviation of the random intercept
+plot(x = density(random$Intercept), main = "")
+lines(x = seq(from =-1.2, to = 1.2, by = 0.01),
+y = dnorm(x = seq(from =-1.2, to = 1.2, by = 0.01),
+mean = 0, sd = sd),
+col = "red")
+legend(x = "topright", col = c("black", "red"), lwd = 1,
+legend = c("Density estimation", "Normaldistribution"),
+cex = 0.6)
+
+
+# comment: The normality assumption for the random intercepts is violated — the distribution is bimodal rather than bell-shaped. This has limited impact on the treatment effect estimate, which is robust to this violation, but should be acknowledged as a limitation of the analysis, particularly given the small number of clusters.
+```
+```{r}
+
+# 2. Residuals vs Fitted (Homoscedasticity + Linearity)
+
+resid_df <- data.frame(fitted = fitted_values, residuals = residuals_values)
+
+ggplot(resid_df, aes(x = fitted, y = residuals)) +
+  geom_point(color = "grey40", alpha = 0.6) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  geom_smooth(method = "loess", se = FALSE, color = "#d95f02") +
+  labs(title = "Residuals vs Fitted Values",
+       x = "Fitted Values", y = "Residuals") +
+  theme_bw()
+
+
+# 2. Residuals vs Fitted (Homoscedasticity + Linearity) - code from Katja
+# Extract fitted values and residuals
+fitted_values <- fitted(M0)
+residuals_values <- residuals(M0)
+# Create a data frame for plotting
+fitted_residuals_data <- data.frame(
+fitted = fitted_values,
+residuals = residuals_values
+)
+# Plot fitted vs residuals
+plot1 <- ggplot(fitted_residuals_data,
+aes(x = fitted, y = residuals)) +
+geom_point() +
+geom_hline(yintercept = 0,
+linetype = "dashed", color = "red") +
+theme_minimal() +
+labs(x = "Fitted Values", y = "Residuals") +
+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+sd <- as.data.frame(VarCorr(M0))[2, 5]
+plot2 <- ggplot(fitted_residuals_data, aes(x=residuals)) +
+geom_histogram(aes(y = ..density..),
+fill = "lightblue",
+color = "black",
+alpha = 0.6) +
+geom_density(color = "black", size = 1.2) +
+stat_function(fun = dnorm, args = list(mean = 0, sd = sd),
+color = "red", linewidth = 1.2, linetype = "dotted")
+plot1 + plot2
+
+# Comment: The normality assumption for the residuals is largely satisfied for the majority of observations. The residual distribution is approximately symmetric and centred around zero, with the kernel density closely following the theoretical normal curve. However, one extreme outlier with a residual of approximately -16 introduces a long left tail, which is responsible for the apparent deviation in the smoothed Residuals vs Fitted plot. 
+```
+```{r}
+
+# This single observation warrants further investigation — if confirmed as a data entry error or clinically implausible value, its removal is justified. A sensitivity analysis with and without this observation is recommended to assess its influence on the treatment effect estimate.
+
+qqnorm(residuals(model))
+qqline(residuals(model))
+
+# 找出这个点
+which(residuals(model) < -10)
+
+# 看看这个患者的数据
+dattab[which(residuals(model) < -10), ]
+
+```
+
+
+8. Calculate and interpret the interrelation coefficient.
+```{r,  message = FALSE, warning=FALSE, include=TRUE}
+var_cluster <- as.data.frame(summary(M0)$varcor)[1, "vcov"]
+var_residual <- as.data.frame(summary(M0)$varcor)[2, "vcov"]
+round(var_cluster/(var_cluster + var_residual), 4)*100
+
+# interpretation:
+# 4% of the unexplained variance in the BMI reduction after accounting for the fixed effects is 
+# due to the practices. The rest of the unexplained variance is due to individual-level differences. The practices have little effect on the outcome variable, and most of the variation is due to individual-level differences.
+
+
+```

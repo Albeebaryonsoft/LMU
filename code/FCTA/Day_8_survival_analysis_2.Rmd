@@ -50,6 +50,7 @@ conflict_scout() # check the conflicts
 
 d <- autoReg::anderson 
 ?autoReg::anderson 
+
 d %<>% 
   mutate(sex = case_when(
   sex == "0" ~ "female",
@@ -69,10 +70,12 @@ d %<>%
     ))
 
 class(d$sex)
+
 m_cox <- coxph(Surv(time,status) ~ sex + rx + logWBC, data = d)
 m_cox$n
 m_cox$nevent
 summary(m_cox) # n= 42, number of events= 30 
+
 m_cox %>% tbl_regression(exponentiate = TRUE)
 
 
